@@ -17,7 +17,8 @@
     "@agentclientprotocol/sdk": "^1.4.0",
     "@types/node": "^24.0.0",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.9.3",
+    "acp-rad": "workspace:*",
+    "typescript": "~6.0.2",
     "zod": "^4.5.2"
   }
 }

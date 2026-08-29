@@ -19,9 +19,12 @@ from acp.schema import (
     InitializeResponse,
     NewSessionResponse,
 )
-from deepagents_acp.server import AgentServerACP
+from deepagents_acp.server import AgentServerACP, AgentSessionContext
+from langgraph.graph.state import CompiledStateGraph
 
 from rad_agent import AGENT_NAME, PROFILE_VERSION
+from rad_agent.agent import build_agent
+from rad_agent.backend import AcpClientBackend
 from rad_agent.config import model_spec
 
 log = logging.getLogger(__name__)
@@ -56,12 +59,34 @@ def rad_meta(kwargs: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class RadAgentServer(AgentServerACP):
-    """AgentServerACP speaking the ACP-Rad profile."""
+    """AgentServerACP speaking the ACP-Rad profile.
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    The agent graph is built per session (deepagents-acp calls the factory lazily at the
+    first prompt) with an ``AcpClientBackend`` bound to that session, so the model's file
+    tools are served by the editor.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(agent=self._build_agent, **kwargs)
         self.session_rad: dict[str, dict[str, Any]] = {}
         self.client_rad_caps: dict[str, Any] | None = None
+        self._current_session_id: str | None = None
+
+    # deepagents-acp's AgentSessionContext carries no session id; capture it here.
+    def _reset_agent(self, session_id: str) -> None:
+        self._current_session_id = session_id
+        super()._reset_agent(session_id)
+
+    def _build_agent(self, context: AgentSessionContext) -> CompiledStateGraph:
+        session_id = self._current_session_id
+        if session_id is None:  # pragma: no cover — deepagents-acp always resets first
+            raise RuntimeError("agent factory called without a session")
+        rad = self.session_rad.get(session_id, {})
+        manifest = rad.get("manifest") or []
+        if not manifest:
+            log.warning("session %s has no manifest; ls/glob/grep will be empty", session_id)
+        backend = AcpClientBackend(self._conn, session_id, list(manifest))
+        return build_agent(context, backend=backend, accession=rad.get("accession"))
 
     async def initialize(
         self,

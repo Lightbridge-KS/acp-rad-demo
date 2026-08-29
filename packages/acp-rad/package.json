@@ -2,7 +2,7 @@
   "name": "acp-rad",
   "version": "0.1.0",
   "private": true,
-  "description": "ACP-Rad profile as code: _meta.rad schemas, section ids, error codes (TypeScript, framework-free)",
+  "description": "ACP-Rad profile as code: _meta.rad schemas, canonical Markdown ⇄ Delta, virtual namespace, ReportStore (TypeScript, framework-free)",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -14,10 +14,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "quill-delta": "^5.1.0",
     "zod": "^4.5.2"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2",
     "vitest": "^4.1.0"
   }
 }

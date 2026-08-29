@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { AgentState, AgentStatus, TranscriptEntry } from "../agent/store.ts";
+import type { AgentState, AgentStatus, ToolCard, TranscriptEntry } from "../agent/store.ts";
 
 type Props = {
   state: AgentState;
@@ -13,6 +13,15 @@ const STATUS_DOT: Record<AgentStatus, string> = {
   ready: "bg-emerald-500",
   prompting: "bg-sky-500 animate-pulse",
   error: "bg-red-500",
+};
+
+const KIND_ICON: Record<string, string> = {
+  read: "📄",
+  edit: "✏️",
+  search: "🔍",
+  execute: "⚙️",
+  think: "💭",
+  fetch: "🌐",
 };
 
 export function Sidebar({ state, onSend, onStop }: Props) {
@@ -41,7 +50,7 @@ export function Sidebar({ state, onSend, onStop }: Props) {
 
       <ol className="flex-1 space-y-2 overflow-y-auto px-3 py-3 text-sm">
         {state.transcript.map((t) => (
-          <Bubble key={t.id} entry={t} />
+          <Bubble key={t.id} entry={t} tools={state.tools} />
         ))}
         {state.error && <li className="text-red-600">{state.error}</li>}
       </ol>
@@ -77,7 +86,7 @@ export function Sidebar({ state, onSend, onStop }: Props) {
   );
 }
 
-function Bubble({ entry }: { entry: TranscriptEntry }) {
+function Bubble({ entry, tools }: { entry: TranscriptEntry; tools: Record<string, ToolCard> }) {
   switch (entry.role) {
     case "user":
       return <li className="ml-6 rounded-lg bg-sky-100 px-3 py-2 whitespace-pre-wrap">{entry.text}</li>;
@@ -92,6 +101,21 @@ function Bubble({ entry }: { entry: TranscriptEntry }) {
           </details>
         </li>
       );
+    case "tool": {
+      const card = tools[entry.toolCallId];
+      if (!card) return null;
+      return (
+        <li className="mr-6 flex items-center gap-2 rounded border border-gray-200 bg-white px-2 py-1 font-mono text-xs">
+          <span>{KIND_ICON[card.kind ?? ""] ?? "▸"}</span>
+          <span className="truncate" title={card.title}>
+            {card.title}
+          </span>
+          <span className={`ml-auto ${card.status === "completed" ? "text-emerald-600" : card.status === "failed" ? "text-red-600" : "text-gray-400"}`}>
+            {card.status ?? "…"}
+          </span>
+        </li>
+      );
+    }
     case "system":
       return <li className="text-center text-xs text-gray-500">{entry.text}</li>;
   }

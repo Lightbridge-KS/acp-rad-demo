@@ -1,0 +1,1 @@
+An initial review shows no evidence of intracranial hemorrhage, acute large territorial infarction, midline shift or brain herniation. The contents in this short preliminary report include only critical imaging findings as listed. A full report will follow.

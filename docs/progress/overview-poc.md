@@ -11,7 +11,7 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 
 - [x] **1. Tracer bullet** (2026-08-29, `9d41220`) — repo bootstrap; editor mounts Quill with one fixture; browser ACP client ⇄ WS bridge ⇄ rad-agent (stdio); `initialize`/`session/new` carry `_meta.rad`; prompt streams into the sidebar. Verified: `just check` green; `just smoke` OK on Ollama `gpt-oss:20b` and hosted `gpt-5`; browser round-trip via Chrome; unknown `?agent=` closes with 4004.
 - [x] **1b. Level 0 spike** (2026-08-29, `_playground/2026-08-29_level0-spike/NOTES.md`) — `claude-agent-acp` 0.70.0 over the same bridge (`?agent=claude`), two runs. Feasible for the demo. Never uses client `fs/*`; edits the real disk; inherits the host user's permission mode (`auto` ⇒ silent approval, run 1 edited via Bash with no diff/permission); with `session/set_mode: default` the Edit path yields `tool_call_update{diff}` → `request_permission{Deny, Allow Once, Always Allow}` → file on disk. Rules graduated to design §8 and *Confirmed contracts*.
-- [ ] **2. ReportStore** — Delta⇄Markdown (label-line grammar), virtual namespace + RO rules, `fs/read_text_file` served from Quill; `AcpClientBackend` in the agent; agent reads FINDINGS.
+- [x] **2. ReportStore** (2026-08-29) — Delta⇄Markdown (label-line grammar, 72 tests incl. round-trip over 12 real files), virtual namespace + RO rules, `fs/read_text_file` served from live Quill; manifest at `session/new`; `AcpClientBackend` (ls/read/glob/grep over the client, writes refused). Verified: `just check` green; `just smoke` OK on Ollama and hosted `gpt-5` (read tool → `fs/read_text_file` → organ label); browser: bold labels render, hand-edited line is served live to the agent.
 - [ ] **3. Sign-off** — `edit_file` → diff card → permission card (clinical verbs) → grant (path + expected content) → `fs/write_text_file` → `ai-draft` blot → audit (editor stamps, bridge persists JSONL). Scenario 1.
 - [ ] **4. Priors, templates, reject, cancel** — scenarios 2, 4, 5; `/template` (scenario 0); `/short-prelim` (3b).
 - [ ] **5. QA** — `raise_critical_finding` tool → `_rad/critical_finding` → alert card. Scenario 3.
@@ -20,15 +20,16 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 
 ## Now / Next
 
-- **Now:** slice 2 (ReportStore).
-- **Next:** slice 3 (sign-off flow) — also the moment to evaluate assistant-ui (Deferred).
+- **Now:** slice 3 (sign-off flow) — also the moment to evaluate assistant-ui (Deferred).
+- **Next:** slice 4 (priors, templates, `/template`, `/short-prelim`, reject, cancel).
 
 ## Deferred
 
 - **assistant-ui as the sidebar frontend** (KS idea, 2026-08-29) — evaluate `@assistant-ui/react` (cloned at `~/OSS/ChatUi/assistant-ui`, see its `_docs/`) as a replacement for the hand-rolled sidebar. Explore **at slice 3**, when the sidebar grows tool cards, permission cards, and plan rendering — that is where a chat-UI library earns or fails its keep. Feasibility questions to answer then: can its runtime be driven from ACP `session/update` (`useExternalStoreRuntime` / `useLocalRuntime`), can `tool_call` + `request_permission` map onto its tool-call UI and human-in-the-loop parts, and does it stay framework-light in Vite. Not before slice 3 — don't explore yet.
 - Fixture `ct-brain-er-stroke` (refined by KS) now carries a filled IMPRESSION; scenario 1 (draft impression) needs an empty one. Resolve at slice 3: a cleared-impression variant or an in-demo "clear section" action.
 - Revise `docs/ideas/acp-rad-protocol-proposal.md` to match the design: §4.2 grammar → label-lines; drop §8.3 `section_patch`; §5 `reportStatus` enum; companion line "Flutter Quill" → QuillJS; `ramaai-dev` → `radrama-ai`.
-- Absent-section rule (e.g. US-WA has no technique block): section absent ⇒ file absent ⇒ `-32004`. Decide at slice 2.
+- Canonical grammar v0.1 does not escape literal `*`/`_` (reports don't use them). Revisit only if a real report needs it.
+- Local `gpt-oss:20b` occasionally answers without calling `read_file`; the smoke prompt now says "use your read_file tool". Hosted models are deterministic here.
 - `session/load` resume; model dropdown via `session/set_config_option`.
 
 ## Confirmed contracts
@@ -40,6 +41,7 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 - `deepagents-acp` calls the agent factory lazily at the first prompt, not at `session/new`.
 - **Level 0 agents (spike 1b):** a registry agent's permission gating is governed by the *host user's* settings and the model's tool choice, not by the Client. The Client therefore (a) pins `session/set_mode: default` after `session/new` when `modes` is advertised, (b) filters `allow_always` from write permissions (INV-1), (c) ignores their `available_commands_update` (host-skill leak), (d) learns of edits from the on-disk mirror, not `fs/write_text_file`. The `diff` for an edit arrives in `tool_call_update.content` *before* `session/request_permission`, correlated by `toolCallId`.
 - Unknown `sessionUpdate` kinds (`usage_update`, `config_option_update`) pass through the TS SDK; the sidebar must tolerate them.
+- **Slice 2:** `session/new._meta.rad.manifest: string[]` lists every readable virtual path (ACP v1 has no `ls`); `ls`/`glob` answer from it, `grep` reads candidates. Converter API is `Op[]`-based (no runtime Delta class; `quill-delta` is a type-only dep) so Quill's Delta and the package never need the same class. Absent section ⇒ absent file ⇒ `-32004` (US-WA has no `technique`). Every `fs/write_text_file` → `-32003` until the proposal flow (slice 3). Parse rule: `**` opens bold only before a non-space, closes only after one; `_` only at word boundaries and never adjacent to `_`; an unclosed opener unwinds to literal text.
 
 ## Open questions
 

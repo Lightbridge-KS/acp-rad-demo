@@ -18,10 +18,10 @@ Patchy hypodense areas involving periventricular and deep white matter of bilate
 **Brain herniation:** None.
 **Vascular system:** Hyperdense left M1 segment of the middle cerebral artery. Atherosclerotic changes of bilateral intracranial ICAs and vertebrobasilar system.
 **Calvarium and scalp:** No fracture identified.
-Skull base, sella and temporomandibular joints (TMJs): Normal.
+**Skull base, sella and temporomandibular joints (TMJs):** Normal.
 **Visualized orbits, paranasal sinuses and mastoid air cells:** Mild mucosal thickening of bilateral ethmoid sinuses. The rest of visualized both orbits, paranasal sinuses, mastoid air cells, and nasopharynx appear unremarkable.
 **Visualized upper cervical spine:** No fracture identified.
 
 **IMPRESSION:**
 - Ill-defined hypodense lesion involving the left insular cortex, left lentiform nucleus, and left frontal operculum with hyperdense left MCA sign; likely acute segmental infarction of the left MCA territory.
-- Chronic lacunar infarction at the right thalamus with small vessel disease, as described. 
+- Chronic lacunar infarction at the right thalamus with small vessel disease, as described.

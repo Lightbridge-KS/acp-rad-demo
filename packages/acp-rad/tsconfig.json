@@ -7,10 +7,11 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": []
+    "types": ["node"]
   },
   "include": ["src"]
 }

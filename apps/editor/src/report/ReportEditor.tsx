@@ -1,17 +1,19 @@
 import Quill from "quill";
+import type { Op } from "quill";
 import "quill/dist/quill.snow.css";
 import { useEffect, useRef } from "react";
 
 /**
  * Formats a report may contain. Anything else (pasted or programmatic) is
  * stripped by Quill — the report document model is a whitelist, not a
- * free-for-all. `ai-draft` joins this list in slice 3.
+ * free-for-all. Mirrors the canonical grammar (bold, italic, lists). `ai-draft`
+ * joins this list in slice 3.
  */
-const REPORT_FORMATS = ["bold", "italic", "list", "header"];
+const REPORT_FORMATS = ["bold", "italic", "list"];
 
 type Props = {
-  /** Plain text for slice 1; a canonical-Markdown → Delta loader replaces this in slice 2. */
-  initialText: string;
+  /** Canonical report as Delta ops (`markdownToDelta(reportMarkdown)`). */
+  initialOps: Op[];
   onReady?: (quill: Quill) => void;
 };
 
@@ -20,11 +22,11 @@ type Props = {
  * playground): Quill owns the DOM inside the container; React never re-renders it.
  * Re-mount with a `key` to load a different report.
  */
-export function ReportEditor({ initialText, onReady }: Props) {
+export function ReportEditor({ initialOps, onReady }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
-  const initialTextRef = useRef(initialText);
+  const initialOpsRef = useRef(initialOps);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -41,7 +43,7 @@ export function ReportEditor({ initialText, onReady }: Props) {
         history: { userOnly: true },
       },
     });
-    quill.setText(initialTextRef.current, "api");
+    quill.setContents(initialOpsRef.current, "api");
     onReadyRef.current?.(quill);
     return () => {
       container.replaceChildren();

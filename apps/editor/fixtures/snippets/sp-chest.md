@@ -1,0 +1,1 @@
+An initial review shows no evidence of significant tube/line malposition, pneumothorax, acute pulmonary embolism, acute aortic dissection or active contrast extravasation. The contents in this short preliminary report include only critical imaging findings as listed. A full report will follow.

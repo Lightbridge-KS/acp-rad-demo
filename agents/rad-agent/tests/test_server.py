@@ -6,14 +6,12 @@ import pytest
 from acp.exceptions import RequestError
 from acp.schema import Implementation
 
+from rad_agent.backend import AcpClientBackend
 from rad_agent.server import AGENT_RAD_CAPS, RadAgentServer, rad_meta
 
 
 def _server() -> RadAgentServer:
-    def build_agent(_context):  # never called in these tests
-        raise AssertionError("agent factory should not run at initialize/new_session")
-
-    return RadAgentServer(agent=build_agent)
+    return RadAgentServer()
 
 
 async def test_initialize_advertises_rad_caps_and_agent_info() -> None:
@@ -54,6 +52,31 @@ async def test_new_session_without_meta_is_level0_friendly() -> None:
     response = await server.new_session("/tmp/anything", mcp_servers=[])
     assert response.session_id
     assert response.session_id not in server.session_rad
+
+
+async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
+    import rad_agent.server as server_mod
+
+    captured: dict[str, object] = {}
+
+    def fake_build_agent(context, *, backend, accession):
+        captured["backend"] = backend
+        captured["accession"] = accession
+        return object()  # stands in for the compiled graph
+
+    monkeypatch.setattr(server_mod, "build_agent", fake_build_agent)
+    server = _server()
+    server._conn = object()  # type: ignore[assignment]
+    manifest = ["/worklist/ACC1/report.md", "/priors/index.md"]
+    created = await server.new_session(
+        "/worklist/ACC1", mcp_servers=[], rad={"accession": "ACC1", "manifest": manifest}
+    )
+    server._reset_agent(created.session_id)
+    backend = captured["backend"]
+    assert isinstance(backend, AcpClientBackend)
+    assert backend.session_id == created.session_id
+    assert backend.manifest == sorted(manifest)
+    assert captured["accession"] == "ACC1"
 
 
 async def test_ext_method_is_not_found() -> None:

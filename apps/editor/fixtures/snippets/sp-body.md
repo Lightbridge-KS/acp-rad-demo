@@ -1,0 +1,1 @@
+An initial review shows no evidence of pneumoperitoneum, intra-abdominal hemorrhage, active contrast extravasation or mesenteric vascular occlusion. The contents in this short preliminary report include only critical imaging findings as listed. A full report will follow.

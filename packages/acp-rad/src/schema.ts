@@ -92,6 +92,12 @@ export const zRadSessionMeta = z.object({
   setting: z.string().optional(),
   reportStatus: zReportStatus,
   phiBoundary: zPhiBoundary,
+  /**
+   * Every virtual path the session can read (ACP v1 has no `ls`). Sent by the Client at
+   * `session/new`; rad-aware agents answer `ls`/`glob` from it. Optional so Level 0 agents
+   * simply ignore it.
+   */
+  manifest: z.array(z.string()).optional(),
 });
 export type RadSessionMeta = z.infer<typeof zRadSessionMeta>;
 
