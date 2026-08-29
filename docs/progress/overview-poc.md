@@ -5,7 +5,7 @@ read_when: Starting any session on this repo; before planning a slice; when land
 
 # ACP-Rad PoC — progress
 
-Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build order §9, decision ledger §11).
+Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
 
 ## Milestones
 
@@ -13,14 +13,14 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 - [x] **1b. Level 0 spike** (2026-08-29, `_playground/2026-08-29_level0-spike/NOTES.md`) — `claude-agent-acp` 0.70.0 over the same bridge (`?agent=claude`), two runs. Feasible for the demo. Never uses client `fs/*`; edits the real disk; inherits the host user's permission mode (`auto` ⇒ silent approval, run 1 edited via Bash with no diff/permission); with `session/set_mode: default` the Edit path yields `tool_call_update{diff}` → `request_permission{Deny, Allow Once, Always Allow}` → file on disk. Rules graduated to design §8 and *Confirmed contracts*.
 - [x] **2. ReportStore** (2026-08-29, `d573f05`) — Delta⇄Markdown (label-line grammar, 72 tests incl. round-trip over 12 real files), virtual namespace + RO rules, `fs/read_text_file` served from live Quill; manifest at `session/new`; `AcpClientBackend` (ls/read/glob/grep over the client, writes refused). Verified: `just check` green; `just smoke` OK on Ollama and hosted `gpt-5` (read tool → `fs/read_text_file` → organ label); browser: bold labels render, hand-edited line is served live to the agent.
 - [x] **3. Sign-off** (2026-08-29, `cf0d6d3`) — inline tracked changes in Quill (line-level hunks, ADR 0002; `ai-insert`/`ai-delete` overlays stripped from the buffer), per-hunk Insert / Insert as draft / Discard, permission answered from the decisions (clinical verbs on the wire via `PermissionRewritingClient`), grant read-through + `applied`/`partial` write outcome, `ai-draft` marks with per-line clear + Mark all reviewed, audit JSONL via the bridge, sidebar on `@assistant-ui/react` 0.15.17 (ADR 0001), `RadReportAgentServer` rename, demo start-state (impression blanked). Verified: `just check` green (85 + 24 + 23 tests); `just smoke` OK on Ollama and hosted (edit → permission → write → landed); browser scenario 1 with `gpt-5.6-terra`: overlay → typing while pending → Insert as draft → amber → per-line clear → Mark all reviewed → second proposal → Discard; audit trail on disk.
-- [ ] **4. Commands, snippets, priors** — `Commands ▾` menu + Notion-style in-editor `/` menu (Suggested · Snippets · Skills; sidebar composer `/` shares the list); `/template` (scenario 0), `/short-prelim-*` (3b), `/snippet`; priors fixtures + `/compare` (scenario 2); cancel polish (scenario 5). Reject (scenario 4) already lands in slice 3.
+- [ ] **4. Commands, snippets, priors** — one command registry behind `Commands ▾`, the in-report `/` menu and the composer `/` (Suggested · Editor · Skills); document commands `/template` (scenario 0, deterministic; option C tracked changes on a non-blank buffer; short-prelim fold-in) and `/short-prelim` (3b); snippet commands `/er-reviewed` · `/er-not-reviewed` · `/discuss-with-dr` (home-anchored); fixtures: blank CT brain + CXR and CT chest with priors (+ `?case=`); agent advertises `/impression` · `/compare` · `/proofread` via `available_commands_update` (scenario 2); cancel polish (scenario 5); vocabulary rename: `ai-draft` → unreviewed, UI verbs *Accept / Accept for review / Reject* on a *change* (code keeps `hunk`), INV-1 = human gate, `reportStatus` → `draft | preliminary | final` + `shortPrelim`. Spec: design 02 §2.2, §4–5. Reject (scenario 4) already lands in slice 3.
 - [ ] **5. QA** — `raise_critical_finding` tool → `_rad/critical_finding` → alert card. Scenario 3.
 - [ ] **6. Demo polish** — worklist switcher (3 cases), status pill + Finalize lock, provider switch, audit panel.
 - [ ] **7. (stretch) Level 0 in the demo** (~1 day) — target **`claude-agent-acp` first, `gemini --experimental-acp` second** (design §2/§8). Bridge: materialize the namespace to an on-disk mirror + file-watch (`_bridge/file_changed`); write `<mirror>/.claude/settings.json` denying Bash/Write/WebFetch so edits go through `Edit`. Editor: already pins `session/set_mode: default` and filters `allow_always` (slice 3); still needs to ignore L0 `available_commands_update` and apply grant matching to the file-watch event instead of `fs/write_text_file`.
 
 ## Now / Next
 
-- **Now:** slice 4 — `Commands ▾` + in-editor `/` menu (snippets · skills), `/template`, `/short-prelim-*`, priors + `/compare`, cancel polish.
+- **Now:** slice 4 — command registry (`Commands ▾` · `/` menu · composer), document + snippet commands, priors fixtures + `/compare`, cancel polish, vocabulary rename. Design polished 2026-08-30 (docs/design/01–03 + `CONTEXT.md`).
 - **Next:** slice 5 (`_rad/critical_finding` QA alert).
 
 ## Deferred

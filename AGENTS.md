@@ -4,15 +4,18 @@ PoC: a radiology report editor (QuillJS, browser) hosting an AI agent through th
 
 ## Read first
 
-- `docs/design/acp-rad-poc-spec.md` — the settled design (architecture, flows, decision ledger §11, build order §9).
+- `CONTEXT.md` — the glossary; use its terms for every name and label.
+- `docs/design/01-system-architecture.md` — C1–C3, key flows, the profile as exercised, invariants.
+- `docs/design/02-surface-architecture.md` — what the radiologist and the agent see: commands, `/` menu, the human gate, lifecycle.
+- `docs/design/03-agentic-architecture.md` — the agent's organs: loop, tools over `fs/*`, the HITL gate split across the boundary.
 - `docs/progress/overview-poc.md` — where we are; update it as slices land.
-- `docs/ideas/acp-rad-protocol-proposal.md` — the profile proposal (draft; some sections superseded by the design doc, see its §5).
+- `docs/ideas/acp-rad-protocol-proposal.md` — the profile proposal (draft; deltas listed in design 01 §8). Original one-file draft: `docs/archive/design/acp-rad-poc-spec.md` (§0 survey, §11 ledger).
 - `docs/dev/running.md` — how to run and switch models.
 
 ## Layout
 
 ```
-apps/editor      Vite + React 19 + TS + QuillJS 2 + Tailwind 4 — the ACP CLIENT (browser). Owns INV-1 (sign-off), RO rules, audit.
+apps/editor      Vite + React 19 + TS + QuillJS 2 + Tailwind 4 — the ACP CLIENT (browser). Owns INV-1 (human gate), RO rules, audit.
 apps/bridge      Node 26 + ws — WebSocket ⇄ stdio launcher for ACP agents (dumb pipe; agents.json). Runs TS natively, no build.
 agents/rad-agent Python 3.13 (uv) — deepagents-acp subclass; the ACP AGENT. stdout is the wire: log to stderr only.
 packages/acp-rad TS, framework-free — the profile as code (zod schemas for _meta.rad, section ids, error codes).

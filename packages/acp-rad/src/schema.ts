@@ -2,7 +2,7 @@
  * ACP-Rad profile v0.1 — wire-level schemas.
  *
  * Everything the profile adds to vanilla ACP rides in `_meta.rad` (v1 has no
- * custom content types). See docs/design/acp-rad-poc-spec.md §5 and the
+ * custom content types). See docs/design/01-system-architecture.md §8 and the
  * proposal in docs/ideas/acp-rad-protocol-proposal.md.
  */
 import { z } from "zod";

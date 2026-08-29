@@ -1,9 +1,11 @@
 ---
-summary: Design draft for the ACP-Rad PoC app — QuillJS report editor (browser ACP Client) + deepagents-acp agent (Python) over WebSocket; scope, flows, profile simplifications, repo layout.
-read_when: Planning or building the PoC; deciding what of the ACP-Rad proposal the PoC implements; onboarding to the stack choice.
+summary: ARCHIVED 2026-08-30 — the original one-file design draft (v0.1), superseded by docs/design/01–03; kept for its §0 source survey and §11 grilling ledger.
+read_when: Looking up why a 2026-08-29 decision was made (§11) or what the SDK/source survey found (§0). For current design read docs/design/01-system-architecture.md, 02-surface-architecture.md, 03-agentic-architecture.md.
 ---
 
 # ACP-Rad PoC — Design Draft v0.1
+
+> **Archived 2026-08-30.** Split into [`design/01-system-architecture.md`](../../design/01-system-architecture.md), [`design/02-surface-architecture.md`](../../design/02-surface-architecture.md), [`design/03-agentic-architecture.md`](../../design/03-agentic-architecture.md) and the glossary [`CONTEXT.md`](../../../CONTEXT.md). Later decisions (2026-08-30) supersede parts of this text: `/template` and `/short-prelim` are deterministic *document commands*; a short prelim is the whole buffer, folded in later; `reportStatus ∈ {draft, preliminary, final}` + `shortPrelim` flag (not §5.6's four states); the amber mark is *unreviewed*, not "draft"; INV-1 is the *Human gate* ("sign-off" now means finalization); a hunk is a *change* in the UI with *Accept / Accept for review / Reject*. Still authoritative here: §0 (source survey) and §11 (decision ledger).
 
 | | |
 |---|---|
