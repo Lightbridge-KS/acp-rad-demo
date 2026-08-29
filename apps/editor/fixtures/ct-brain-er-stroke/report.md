@@ -8,11 +8,11 @@
 **COMPARISON:** None.
 
 **FINDINGS:**
-**Cerebral parenchyma:** Loss of gray-white differentiation involving the left insular cortex and left lentiform nucleus with subtle hypodensity of the left frontal operculum, ASPECTS 7. No intraparenchymal hemorrhage.
+**Cerebral parenchyma:** Ill-defined hypodense lesion involving the left insular cortex, left lentiform nucleus, and left frontal operculum with loss of gray-white differentiation. No intraparenchymal hemorrhage.
 A well-defined hypodense lesion at the right thalamus, probably chronic lacunar infarction.
 Patchy hypodense areas involving periventricular and deep white matter of bilateral fronto-parietal lobes, likely ischemic white matter change related to small vessel disease.
-Cerebellum and posterior fossa: Normal given a limited evaluation of the brainstem due to beam-hardening artifacts. The cerebellum appears unremarkable.
-Extraaxial spaces: No extra-axial collection is observed.
+**Cerebellum and posterior fossa:** Normal given a limited evaluation of the brainstem due to beam-hardening artifacts. The cerebellum appears unremarkable.
+**Extraaxial spaces:** No extra-axial collection is observed.
 **Ventricles:** Normal size of the ventricular system. No intraventricular hemorrhage.
 **Midline shift:** None.
 **Brain herniation:** None.
@@ -23,4 +23,5 @@ Skull base, sella and temporomandibular joints (TMJs): Normal.
 **Visualized upper cervical spine:** No fracture identified.
 
 **IMPRESSION:**
-- ...
+- Ill-defined hypodense lesion involving the left insular cortex, left lentiform nucleus, and left frontal operculum with hyperdense left MCA sign; likely acute segmental infarction of the left MCA territory.
+- Chronic lacunar infarction at the right thalamus with small vessel disease, as described. 

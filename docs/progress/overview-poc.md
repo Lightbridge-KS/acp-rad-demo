@@ -25,6 +25,8 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 
 ## Deferred
 
+- **assistant-ui as the sidebar frontend** (KS idea, 2026-08-29) — evaluate `@assistant-ui/react` (cloned at `~/OSS/ChatUi/assistant-ui`, see its `_docs/`) as a replacement for the hand-rolled sidebar. Explore **at slice 3**, when the sidebar grows tool cards, permission cards, and plan rendering — that is where a chat-UI library earns or fails its keep. Feasibility questions to answer then: can its runtime be driven from ACP `session/update` (`useExternalStoreRuntime` / `useLocalRuntime`), can `tool_call` + `request_permission` map onto its tool-call UI and human-in-the-loop parts, and does it stay framework-light in Vite. Not before slice 3 — don't explore yet.
+- Fixture `ct-brain-er-stroke` (refined by KS) now carries a filled IMPRESSION; scenario 1 (draft impression) needs an empty one. Resolve at slice 3: a cleared-impression variant or an in-demo "clear section" action.
 - Revise `docs/ideas/acp-rad-protocol-proposal.md` to match the design: §4.2 grammar → label-lines; drop §8.3 `section_patch`; §5 `reportStatus` enum; companion line "Flutter Quill" → QuillJS; `ramaai-dev` → `radrama-ai`.
 - Absent-section rule (e.g. US-WA has no technique block): section absent ⇒ file absent ⇒ `-32004`. Decide at slice 2.
 - `session/load` resume; model dropdown via `session/set_config_option`.
