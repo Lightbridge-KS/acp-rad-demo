@@ -30,3 +30,6 @@ audit/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Claude Code harness artifact
+.claude/.cc-writes
