@@ -40,9 +40,9 @@ export const CLIENT_RAD_CAPS: RadClientCaps = {
 
 /** Options the editor offers itself for an unsolicited write (no agent request preceded it). */
 const LOCAL_OPTIONS: PermissionOption[] = [
-  { optionId: "accept", name: "Insert into report", kind: "allow_once" },
-  { optionId: "accept_edit", name: "Insert as editable draft", kind: "allow_once" },
-  { optionId: "reject", name: "Discard", kind: "reject_once" },
+  { optionId: "accept", name: "Accept", kind: "allow_once" },
+  { optionId: "accept_edit", name: "Accept for review", kind: "allow_once" },
+  { optionId: "reject", name: "Reject", kind: "reject_once" },
 ];
 
 export type AgentEvents = {

@@ -14,7 +14,7 @@ type Props = {
 
 type Pill = { toolCallId: string; hunkId: string; label: string; top: number; conflict: boolean };
 
-/** Floating per-hunk verbs, anchored to the first line of each pending hunk (design §5.7). */
+/** Floating per-change verbs, anchored to the first line of each pending hunk (design 02 §5.1). */
 export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
   const [pills, setPills] = useState<Pill[]>([]);
 
@@ -33,7 +33,7 @@ export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
         next.push({
           toolCallId: p.toolCallId,
           hunkId: h.id,
-          label: `hunk ${i + 1}/${p.hunks.length}${p.section ? ` · ${p.section}` : ""}`,
+          label: `change ${i + 1}/${p.hunks.length} · ${p.section ?? "whole report"}`,
           top: bounds.top,
           conflict: state === "conflict",
         });
@@ -58,11 +58,11 @@ export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
             </>
           ) : (
             <>
-              <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept")}>Insert</Btn>
-              <Btn tone="draft" onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept_edit")}>
-                Insert as draft
+              <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept")}>Accept</Btn>
+              <Btn tone="review" onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept_edit")}>
+                Accept for review
               </Btn>
-              <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "reject")}>Discard</Btn>
+              <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "reject")}>Reject</Btn>
             </>
           )}
         </div>
@@ -71,12 +71,12 @@ export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
   );
 }
 
-function Btn({ tone, onClick, children }: { tone?: "draft"; onClick: () => void; children: string }) {
+function Btn({ tone, onClick, children }: { tone?: "review"; onClick: () => void; children: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-2 py-0.5 hover:bg-gray-100 ${tone === "draft" ? "border-amber-400 bg-amber-50" : "border-gray-300"}`}
+      className={`rounded-full border px-2 py-0.5 hover:bg-gray-100 ${tone === "review" ? "border-amber-400 bg-amber-50" : "border-gray-300"}`}
     >
       {children}
     </button>

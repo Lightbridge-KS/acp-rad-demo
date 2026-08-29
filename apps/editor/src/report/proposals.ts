@@ -252,8 +252,8 @@ export class ProposalStore {
 }
 
 /**
- * Map per-hunk decisions onto the agent's offered options: `accept_edit` if any draft-mode
- * accept and the option exists, else `accept`, else the first `allow_once`; all discarded ⇒
+ * Map per-hunk decisions onto the agent's offered options: `accept_edit` if any hunk was
+ * accepted for review and the option exists, else `accept`, else the first `allow_once`; all discarded ⇒
  * `reject` or the first `reject_once`.
  */
 export function answerFor(p: Proposal, anyAccepted: boolean): PermissionAnswer {
@@ -261,8 +261,8 @@ export function answerFor(p: Proposal, anyAccepted: boolean): PermissionAnswer {
   const byId = (id: string) => options.find((o) => o.optionId === id);
   const byKind = (kind: string) => options.find((o) => o.kind === kind);
   if (anyAccepted) {
-    const anyDraft = Object.values(p.states).includes("accept_edit");
-    const pick = (anyDraft && byId("accept_edit")) || byId("accept") || byId("accept_edit") || byKind("allow_once");
+    const anyForReview = Object.values(p.states).includes("accept_edit");
+    const pick = (anyForReview && byId("accept_edit")) || byId("accept") || byId("accept_edit") || byKind("allow_once");
     return pick ? { outcome: "selected", optionId: pick.optionId } : { outcome: "cancelled" };
   }
   const pick = byId("reject") || byKind("reject_once");

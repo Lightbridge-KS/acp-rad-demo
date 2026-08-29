@@ -2,12 +2,12 @@ import { buildHunks, deltaToMarkdown, markdownToDelta } from "acp-rad";
 import { describe, expect, it } from "vitest";
 import {
   AI_DELETE,
-  AI_DRAFT,
+  AI_UNREVIEWED,
   AI_INSERT,
-  clearAllDrafts,
-  clearDraftOnLines,
+  clearAllUnreviewed,
+  clearUnreviewedOnLines,
   decideHunkOps,
-  draftLineCount,
+  unreviewedLineCount,
   hunkLineIndex,
   locateHunk,
   overlayOps,
@@ -77,15 +77,15 @@ describe("decideHunkOps", () => {
     const out = decideHunkOps(laid(), "h1", "accept", "p1");
     expect(deltaToMarkdown(out)).toBe(REPORT.replace("- ...", "- Acute infarct."));
     expect(pendingHunkIds(out)).toEqual([]);
-    expect(draftLineCount(out)).toBe(0);
+    expect(unreviewedLineCount(out)).toBe(0);
   });
 
-  it("accept_edit: insertion kept as an unreviewed draft", () => {
+  it("accept_edit: insertion kept, marked unreviewed", () => {
     const out = decideHunkOps(laid(), "h1", "accept_edit", "p1");
     expect(deltaToMarkdown(out)).toBe(REPORT.replace("- ...", "- Acute infarct."));
-    expect(draftLineCount(out)).toBe(1);
+    expect(unreviewedLineCount(out)).toBe(1);
     const line = splitLines(out).at(-1)!;
-    expect(line.runs[0]!.attributes?.[AI_DRAFT]).toBe("p1");
+    expect(line.runs[0]!.attributes?.[AI_UNREVIEWED]).toBe("p1");
   });
 
   it("reject: insertion removed, deletion restored", () => {
@@ -103,15 +103,15 @@ describe("decideHunkOps", () => {
   });
 });
 
-describe("drafts", () => {
-  it("clears drafts per touched line and all at once", () => {
+describe("unreviewed text", () => {
+  it("clears the mark per touched line and all at once", () => {
     const hunks = buildHunks("- ...\n", "- A.\n- B.\n");
     const accepted = decideHunkOps(overlayOps(ops(), "impression", hunks).ops, "h1", "accept_edit", "p1");
-    expect(draftLineCount(accepted)).toBe(2);
+    expect(unreviewedLineCount(accepted)).toBe(2);
     const n = splitLines(accepted).length;
-    const one = clearDraftOnLines(accepted, new Set([n - 2]));
-    expect(draftLineCount(one)).toBe(1);
-    expect(draftLineCount(clearAllDrafts(accepted))).toBe(0);
+    const one = clearUnreviewedOnLines(accepted, new Set([n - 2]));
+    expect(unreviewedLineCount(one)).toBe(1);
+    expect(unreviewedLineCount(clearAllUnreviewed(accepted))).toBe(0);
   });
 
   it("touchedLines maps a change delta to line numbers", () => {

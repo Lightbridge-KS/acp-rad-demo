@@ -2,7 +2,7 @@
  * Proposal overlays over plain Quill ops — pure functions, no DOM (ADR 0002, design §5.7).
  *
  * The overlay lives in the Delta as inline attributes (`ai-insert` / `ai-delete` keyed by hunk
- * id, `ai-draft` keyed by proposal id). `stripOverlays` is what the ReportStore reads through,
+ * id, `ai-unreviewed` keyed by proposal id). `stripOverlays` is what the ReportStore reads through,
  * so a pending proposal is rendered but never in the canonical buffer (INV-1).
  */
 import type { AttributeMap, Op } from "quill";
@@ -17,7 +17,7 @@ import {
 
 export const AI_INSERT = "ai-insert";
 export const AI_DELETE = "ai-delete";
-export const AI_DRAFT = "ai-draft";
+export const AI_UNREVIEWED = "ai-unreviewed";
 
 export type Line = { runs: Op[]; attrs: AttributeMap };
 
@@ -155,7 +155,7 @@ function newLinesFor(hunk: Hunk): Line[] {
 
 export type Verb = "accept" | "accept_edit" | "reject";
 
-/** Resolve one hunk: accept keeps the insertion (optionally as draft) and drops the deletion; reject the inverse. */
+/** Resolve one hunk: accept keeps the insertion (optionally marked unreviewed) and drops the deletion; reject the inverse. */
 export function decideHunkOps(ops: Op[], hunkId: string, verb: Verb, proposalId: string): Op[] {
   const out: Line[] = [];
   for (const line of splitLines(ops)) {
@@ -167,7 +167,7 @@ export function decideHunkOps(ops: Op[], hunkId: string, verb: Verb, proposalId:
         attrs: line.attrs,
         runs: line.runs.map((r) => {
           const { [AI_INSERT]: _i, ...rest } = r.attributes ?? {};
-          const attrs = verb === "accept_edit" ? { ...rest, [AI_DRAFT]: proposalId } : rest;
+          const attrs = verb === "accept_edit" ? { ...rest, [AI_UNREVIEWED]: proposalId } : rest;
           return Object.keys(attrs).length ? { insert: r.insert, attributes: attrs } : { insert: r.insert };
         }),
       });
@@ -189,22 +189,22 @@ export function discardHunksOps(ops: Op[], hunkIds: string[]): Op[] {
 }
 
 // ---------------------------------------------------------------------------
-// Drafts
+// Unreviewed text (accepted for review, not yet touched by the radiologist)
 // ---------------------------------------------------------------------------
 
-export function clearDraftOnLines(ops: Op[], lineNumbers: Set<number>): Op[] {
+export function clearUnreviewedOnLines(ops: Op[], lineNumbers: Set<number>): Op[] {
   const lines = splitLines(ops).map((line, i) =>
-    lineNumbers.has(i) ? { attrs: line.attrs, runs: line.runs.map((r) => dropAttr(r, AI_DRAFT)) } : line,
+    lineNumbers.has(i) ? { attrs: line.attrs, runs: line.runs.map((r) => dropAttr(r, AI_UNREVIEWED)) } : line,
   );
   return joinLines(lines);
 }
 
-export function clearAllDrafts(ops: Op[]): Op[] {
-  return joinLines(splitLines(ops).map((l) => ({ attrs: l.attrs, runs: l.runs.map((r) => dropAttr(r, AI_DRAFT)) })));
+export function clearAllUnreviewed(ops: Op[]): Op[] {
+  return joinLines(splitLines(ops).map((l) => ({ attrs: l.attrs, runs: l.runs.map((r) => dropAttr(r, AI_UNREVIEWED)) })));
 }
 
-export function draftLineCount(ops: Op[]): number {
-  return splitLines(ops).filter((l) => l.runs.some((r) => r.attributes?.[AI_DRAFT] !== undefined)).length;
+export function unreviewedLineCount(ops: Op[]): number {
+  return splitLines(ops).filter((l) => l.runs.some((r) => r.attributes?.[AI_UNREVIEWED] !== undefined)).length;
 }
 
 export function pendingHunkIds(ops: Op[]): string[] {
@@ -264,7 +264,7 @@ function cloneOp(op: Op): Op {
 }
 function withoutOverlayAttrs(op: Op): Op {
   if (!op.attributes) return op;
-  const { [AI_INSERT]: _a, [AI_DELETE]: _b, [AI_DRAFT]: _c, ...rest } = op.attributes;
+  const { [AI_INSERT]: _a, [AI_DELETE]: _b, [AI_UNREVIEWED]: _c, ...rest } = op.attributes;
   return Object.keys(rest).length ? { insert: op.insert, attributes: rest } : { insert: op.insert };
 }
 function dropAttr(op: Op, key: string): Op {

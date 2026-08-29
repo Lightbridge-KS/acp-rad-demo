@@ -17,9 +17,9 @@ from acp.schema import PermissionOption
 log = logging.getLogger(__name__)
 
 CLINICAL_OPTIONS: list[PermissionOption] = [
-    PermissionOption(option_id="accept", name="Insert into report", kind="allow_once"),
-    PermissionOption(option_id="accept_edit", name="Insert as editable draft", kind="allow_once"),
-    PermissionOption(option_id="reject", name="Discard", kind="reject_once"),
+    PermissionOption(option_id="accept", name="Accept", kind="allow_once"),
+    PermissionOption(option_id="accept_edit", name="Accept for review", kind="allow_once"),
+    PermissionOption(option_id="reject", name="Reject", kind="reject_once"),
 ]
 
 #: Radiologist's verb → deepagents HITL decision type.

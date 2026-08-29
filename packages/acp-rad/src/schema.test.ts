@@ -45,19 +45,17 @@ describe("schemas", () => {
       reportStatus: "preliminary",
       phiBoundary: "research_synthetic",
     } as const;
-    expect(zRadSessionMeta.parse(meta)).toEqual(meta);
+    expect(zRadSessionMeta.parse(meta)).toEqual({ ...meta, shortPrelim: false });
     expect(worklistRoot(meta.accession)).toBe("/worklist/ACC0000001");
   });
 
-  it("rejects an unknown report status", () => {
-    expect(() =>
-      zRadSessionMeta.parse({
-        accession: "A",
-        modality: "CT",
-        reportStatus: "draft",
-        phiBoundary: "research_synthetic",
-      }),
-    ).toThrow();
+  it("accepts draft with the short-prelim property and rejects the retired statuses", () => {
+    const parsed = zRadSessionMeta.parse({ accession: "A", modality: "CT", reportStatus: "draft", shortPrelim: true, phiBoundary: "research_synthetic" });
+    expect(parsed.reportStatus).toBe("draft");
+    expect(parsed.shortPrelim).toBe(true);
+    for (const reportStatus of ["short_prelim", "preliminary_reviewed", "signed"]) {
+      expect(() => zRadSessionMeta.parse({ accession: "A", modality: "CT", reportStatus, phiBoundary: "research_synthetic" })).toThrow();
+    }
   });
 
   it("accepts a prompt meta with and without focus", () => {

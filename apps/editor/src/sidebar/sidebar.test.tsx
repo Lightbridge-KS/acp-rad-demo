@@ -57,21 +57,21 @@ describe("Sidebar", () => {
         type: "permission_requested",
         toolCallId: "e1",
         options: [
-          { optionId: "accept", name: "Insert into report", kind: "allow_once" },
-          { optionId: "accept_edit", name: "Insert as editable draft", kind: "allow_once" },
-          { optionId: "reject", name: "Discard", kind: "reject_once" },
+          { optionId: "accept", name: "Accept", kind: "allow_once" },
+          { optionId: "accept_edit", name: "Accept for review", kind: "allow_once" },
+          { optionId: "reject", name: "Reject", kind: "reject_once" },
         ],
       }),
     );
     expect(screen.getAllByTestId("tool")[1]!.getAttribute("data-status")).toBe("requires-action");
     expect(screen.getByTestId("decision").textContent).toMatch(/awaiting your decision in the report/);
     // No approve/reject buttons are rendered by the sidebar — the decision is the editor's.
-    expect(screen.queryByRole("button", { name: /Insert|Discard|Allow|Deny/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Accept|Reject|Allow|Deny/ })).toBeNull();
 
     act(() => dispatchRef!({ type: "permission_resolved", toolCallId: "e1", optionId: "accept_edit" }));
     update({ sessionUpdate: "tool_call_update", toolCallId: "e1", status: "completed" });
     act(() => dispatchRef!({ type: "turn_end", stopReason: "end_turn" }));
-    expect(screen.getByTestId("decision").textContent).toMatch(/accepted \(accept_edit\)/);
+    expect(screen.getByTestId("decision").textContent).toMatch(/accepted for review/);
     expect(screen.getAllByTestId("tool")[1]!.getAttribute("data-status")).toBe("complete");
   });
 

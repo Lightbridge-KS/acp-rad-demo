@@ -8,7 +8,7 @@ import { afterUserChange } from "./overlayQuill.ts";
 /**
  * Formats a report may contain. Anything else (pasted or programmatic) is stripped by
  * Quill — the report document model is a whitelist. Mirrors the canonical grammar (bold,
- * italic, lists) plus the proposal overlay and draft marks.
+ * italic, lists) plus the proposal overlay and unreviewed marks.
  */
 const REPORT_FORMATS = ["bold", "italic", "list", ...OVERLAY_FORMATS];
 
@@ -16,7 +16,7 @@ type Props = {
   /** Canonical report as Delta ops (`markdownToDelta(reportMarkdown)`). */
   initialOps: Op[];
   onReady?: (quill: Quill) => void;
-  /** Fires after every user edit (already post-processed: no inherited marks, drafts cleared on touched lines). */
+  /** Fires after every user edit (already post-processed: no inherited marks, unreviewed marks cleared on touched lines). */
   onUserChange?: (quill: Quill, change: Delta) => void;
   /** Overlay UI (hunk controls) rendered above the editor; receives a tick that changes on every text-change. */
   overlay?: (quill: Quill, tick: number) => ReactNode;

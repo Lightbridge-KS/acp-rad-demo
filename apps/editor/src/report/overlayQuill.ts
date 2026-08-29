@@ -5,7 +5,7 @@
  */
 import Quill, { Delta } from "quill";
 import type { Op } from "quill";
-import { AI_DELETE, AI_DRAFT, AI_INSERT, lineIndex, lineLength, splitLines, touchedLines } from "./overlay.ts";
+import { AI_DELETE, AI_UNREVIEWED, AI_INSERT, lineIndex, lineLength, splitLines, touchedLines } from "./overlay.ts";
 
 export function currentOps(quill: Quill): Op[] {
   return quill.getContents().ops;
@@ -17,11 +17,11 @@ export function applyOps(quill: Quill, next: Op[]): void {
   if (change.ops.length > 0) quill.updateContents(change, "api");
 }
 
-const NO_MARKS = { [AI_INSERT]: false, [AI_DELETE]: false, [AI_DRAFT]: false } as const;
+const NO_MARKS = { [AI_INSERT]: false, [AI_DELETE]: false, [AI_UNREVIEWED]: false } as const;
 
 /**
- * After a user edit: typed text must not inherit overlay/draft marks from its neighbours, and
- * any line the radiologist touched loses its `ai-draft` mark (per-line review rule).
+ * After a user edit: typed text must not inherit overlay/unreviewed marks from its neighbours, and
+ * any line the radiologist touched loses its `ai-unreviewed` mark (per-line review rule).
  * Runs with source "silent" so it neither re-triggers `text-change` nor enters undo history.
  */
 export function afterUserChange(quill: Quill, change: Delta): void {
@@ -40,7 +40,7 @@ export function afterUserChange(quill: Quill, change: Delta): void {
   const lines = splitLines(ops);
   for (const i of touchedLines(ops, change.ops)) {
     const line = lines[i];
-    if (!line || !line.runs.some((r) => r.attributes?.[AI_DRAFT] !== undefined)) continue;
-    quill.formatText(lineIndex(lines, i), lineLength(line) - 1, AI_DRAFT, false, "silent");
+    if (!line || !line.runs.some((r) => r.attributes?.[AI_UNREVIEWED] !== undefined)) continue;
+    quill.formatText(lineIndex(lines, i), lineLength(line) - 1, AI_UNREVIEWED, false, "silent");
   }
 }

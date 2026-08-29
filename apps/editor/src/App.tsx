@@ -6,7 +6,7 @@ import { AuditLog } from "./audit/log.ts";
 import { defaultCase } from "./fixtures/index.ts";
 import { HunkControls } from "./report/HunkControls.tsx";
 import { ReportEditor } from "./report/ReportEditor.tsx";
-import { clearAllDrafts, decideHunkOps, discardHunksOps, draftLineCount, overlayOps } from "./report/overlay.ts";
+import { clearAllUnreviewed, decideHunkOps, discardHunksOps, overlayOps, unreviewedLineCount } from "./report/overlay.ts";
 import { applyOps, currentOps } from "./report/overlayQuill.ts";
 import { ProposalStore, type Proposal, type Verb } from "./report/proposals.ts";
 import { makeReportStore } from "./report/reportStore.ts";
@@ -23,7 +23,7 @@ export default function App() {
   const [quill, setQuill] = useState<Quill | null>(null);
   const [proposalList, setProposalList] = useState<Proposal[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
-  const [draftCount, setDraftCount] = useState(0);
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
   const agentRef = useRef<AgentHandle | null>(null);
   const initialOps = useMemo(() => markdownToDelta(fixture.reportMarkdown), [fixture]);
   const proposals = useMemo(() => new ProposalStore(fixture.session.accession), [fixture]);
@@ -63,7 +63,7 @@ export default function App() {
         case "write":
           break;
       }
-      if (quill) setDraftCount(draftLineCount(currentOps(quill)));
+      if (quill) setUnreviewedCount(unreviewedLineCount(currentOps(quill)));
       refresh();
     });
   }, [proposals, audit, quill]);
@@ -160,26 +160,26 @@ export default function App() {
         <span className="ml-auto flex items-center gap-2 text-xs">
           {pendingHunks > 0 && (
             <span className="flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-50 px-2 py-0.5">
-              {pendingHunks} pending hunk{pendingHunks === 1 ? "" : "s"}
+              {pendingHunks} change{pendingHunks === 1 ? "" : "s"}
               <button type="button" className="font-medium underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "accept_edit"))}>
-                Insert all as draft
+                Accept all for review
               </button>
               <button type="button" className="underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "reject"))}>
-                Discard all
+                Reject all
               </button>
             </span>
           )}
-          {draftCount > 0 && (
+          {unreviewedCount > 0 && (
             <span className="flex items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5">
-              {draftCount} unreviewed AI draft line{draftCount === 1 ? "" : "s"}
+              {unreviewedCount} unreviewed line{unreviewedCount === 1 ? "" : "s"}
               <button
                 type="button"
                 className="font-medium underline"
                 onClick={() => {
                   if (!quill) return;
-                  applyOps(quill, clearAllDrafts(currentOps(quill)));
-                  audit.record("draft.cleared", { outcome: "all" });
-                  setDraftCount(0);
+                  applyOps(quill, clearAllUnreviewed(currentOps(quill)));
+                  audit.record("review.cleared", { outcome: "all" });
+                  setUnreviewedCount(0);
                 }}
               >
                 Mark all reviewed
@@ -187,7 +187,8 @@ export default function App() {
             </span>
           )}
           <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
-            {fixture.session.reportStatus} · {fixture.session.phiBoundary}
+            {fixture.session.reportStatus}
+            {fixture.session.shortPrelim ? " · short prelim" : ""} · {fixture.session.phiBoundary}
           </span>
         </span>
       </header>
@@ -197,7 +198,7 @@ export default function App() {
           initialOps={initialOps}
           onReady={setQuill}
           onUserChange={(q) => {
-            setDraftCount(draftLineCount(currentOps(q)));
+            setUnreviewedCount(unreviewedLineCount(currentOps(q)));
           }}
           overlay={(q, tick) => <HunkControls quill={q} proposals={proposalList} tick={tick} onDecide={decide} />}
         />

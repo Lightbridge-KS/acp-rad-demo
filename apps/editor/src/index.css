@@ -28,8 +28,8 @@ body,
   color: #b91c1c;
   text-decoration: line-through;
 }
-/* Accepted "as editable draft": in the buffer, unreviewed. */
-.ql-ai-draft {
+/* Accepted for review: in the buffer, unreviewed. */
+.ql-ai-unreviewed {
   background: #fef3c7;
   border-bottom: 2px dotted #b45309;
 }

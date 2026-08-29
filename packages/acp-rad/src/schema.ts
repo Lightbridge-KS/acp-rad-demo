@@ -21,8 +21,12 @@ export const SECTION_IDS = ["history", "technique", "comparison", "findings", "i
 export const zSectionId = z.enum(SECTION_IDS);
 export type SectionId = z.infer<typeof zSectionId>;
 
-/** Real ER lifecycle (design §5.6). Only `final` changes behaviour: it locks writes. */
-export const zReportStatus = z.enum(["short_prelim", "preliminary", "preliminary_reviewed", "final"]);
+/**
+ * Report lifecycle (design 02 §5.2): draft → preliminary (optional) → final. Only `final`
+ * changes behaviour: it locks writes. A short prelim is `shortPrelim: true` on the session,
+ * a property of the report, not a status.
+ */
+export const zReportStatus = z.enum(["draft", "preliminary", "final"]);
 export type ReportStatus = z.infer<typeof zReportStatus>;
 
 export const zPhiBoundary = z.enum(["deidentified_egress", "onprem_full", "research_synthetic"]);
@@ -91,6 +95,8 @@ export const zRadSessionMeta = z.object({
   protocol: z.string().optional(),
   setting: z.string().optional(),
   reportStatus: zReportStatus,
+  /** The buffer is a short prelim (the region's SP paragraph, issued before the full report). */
+  shortPrelim: z.boolean().default(false),
   phiBoundary: zPhiBoundary,
   /**
    * Every virtual path the session can read (ACP v1 has no `ls`). Sent by the Client at
@@ -152,7 +158,7 @@ export const zAuditRecord = z.object({
   accession: z.string(),
   actor: z.object({ userId: z.string(), role: z.enum(["radiologist", "resident", "system"]) }),
   agent: z.object({ name: z.string(), version: z.string().optional(), level: z.union([z.literal(0), z.literal(1), z.literal(2)]) }),
-  /** e.g. "fs.read", "permission.request", "permission.accept_edit", "fs.write.applied", "draft.cleared". */
+  /** e.g. "fs.read", "permission.request", "permission.accept_edit", "fs.write.applied", "review.cleared". */
   event: z.string(),
   path: z.string().optional(),
   toolCallId: z.string().optional(),

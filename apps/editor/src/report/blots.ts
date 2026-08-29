@@ -1,9 +1,9 @@
 /**
- * Inline blots for the proposal overlay and the accepted-draft mark (design §5.7).
+ * Inline blots for the proposal overlay and the unreviewed mark (design 02 §5.1).
  *
  *   ai-insert <hunkId>     proposed insertion — rendered, NOT in the canonical buffer
  *   ai-delete <hunkId>     proposed deletion  — still in the buffer until accepted
- *   ai-draft  <proposalId> accepted "as editable draft" — in the buffer, unreviewed
+ *   ai-unreviewed <proposalId> accepted "for review" — in the buffer, not yet reviewed
  *
  * Values ride on `data-*` attributes so the overlay module can find a hunk's runs by id.
  */
@@ -40,15 +40,15 @@ function defineMark(blotName: string, className: string, dataAttr: string): Inli
 
 export const AiInsert = defineMark("ai-insert", "ql-ai-insert", "data-hunk");
 export const AiDelete = defineMark("ai-delete", "ql-ai-delete", "data-hunk");
-export const AiDraft = defineMark("ai-draft", "ql-ai-draft", "data-proposal");
+export const AiUnreviewed = defineMark("ai-unreviewed", "ql-ai-unreviewed", "data-proposal");
 
-export const OVERLAY_FORMATS = ["ai-insert", "ai-delete", "ai-draft"] as const;
+export const OVERLAY_FORMATS = ["ai-insert", "ai-delete", "ai-unreviewed"] as const;
 
 let registered = false;
 /** Idempotent; call once before constructing a Quill instance. */
 export function registerReportBlots(): void {
   if (registered) return;
-  Quill.register({ "formats/ai-insert": AiInsert, "formats/ai-delete": AiDelete, "formats/ai-draft": AiDraft }, true);
+  Quill.register({ "formats/ai-insert": AiInsert, "formats/ai-delete": AiDelete, "formats/ai-unreviewed": AiUnreviewed }, true);
   // Keep overlay marks outermost so bold/italic nest inside them predictably.
   for (const name of OVERLAY_FORMATS) if (!Inline.order.includes(name)) Inline.order.push(name);
   registered = true;

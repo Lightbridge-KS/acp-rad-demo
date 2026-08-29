@@ -5,9 +5,9 @@ const ACC = "ACC1";
 const SECTION = "/worklist/ACC1/sections/impression.md";
 const CURRENT = "**IMPRESSION:**\n- ...\n";
 const CLINICAL: PermissionOption[] = [
-  { optionId: "accept", name: "Insert into report", kind: "allow_once" },
-  { optionId: "accept_edit", name: "Insert as editable draft", kind: "allow_once" },
-  { optionId: "reject", name: "Discard", kind: "reject_once" },
+  { optionId: "accept", name: "Accept", kind: "allow_once" },
+  { optionId: "accept_edit", name: "Accept for review", kind: "allow_once" },
+  { optionId: "reject", name: "Reject", kind: "reject_once" },
 ];
 const LEVEL0: PermissionOption[] = [
   { optionId: "allow", name: "Allow Once", kind: "allow_once" },
@@ -131,7 +131,7 @@ describe("ProposalStore", () => {
 
 describe("answerFor", () => {
   const base = { toolCallId: "t", path: SECTION, section: "impression" as const, hunks: [], baseText: "", state: "pending" as const, createdAt: "" };
-  it("prefers accept_edit when any hunk was accepted as draft", () => {
+  it("prefers accept_edit when any hunk was accepted for review", () => {
     expect(answerFor({ ...base, states: { h1: "accept_edit" }, options: CLINICAL }, true)).toEqual({ outcome: "selected", optionId: "accept_edit" });
     expect(answerFor({ ...base, states: { h1: "accept" }, options: CLINICAL }, true)).toEqual({ outcome: "selected", optionId: "accept" });
   });

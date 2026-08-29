@@ -151,13 +151,7 @@ const KIND_LABEL: Record<string, string> = { read: "read", edit: "edit", search:
 const ToolCard = ({ toolName, args, status, approval, artifact }: ToolCallMessagePartProps) => {
   const diff = artifact as { path?: string } | undefined;
   const title = String((args as { title?: string }).title ?? "");
-  const decision =
-    approval &&
-    (approval.approved === undefined
-      ? "awaiting your decision in the report"
-      : approval.approved
-        ? `accepted (${approval.optionId})`
-        : `discarded (${approval.optionId})`);
+  const decision = approval && (approval.approved === undefined ? "awaiting your decision in the report" : decisionLabel(approval.optionId, approval.approved));
   return (
     <div
       data-testid="tool"
@@ -182,6 +176,20 @@ const ToolCard = ({ toolName, args, status, approval, artifact }: ToolCallMessag
     </div>
   );
 };
+
+/** The clinical verb as the radiologist said it; a Level 0 option id is shown as-is. */
+function decisionLabel(optionId: string | undefined, approved: boolean): string {
+  switch (optionId) {
+    case "accept":
+      return "accepted";
+    case "accept_edit":
+      return "accepted for review";
+    case "reject":
+      return "rejected";
+    default:
+      return `${approved ? "accepted" : "rejected"} (${optionId ?? "?"})`;
+  }
+}
 
 function AuditPanel({ records }: { records: AuditRecord[] }) {
   const rows = useMemo(() => [...records].reverse(), [records]);
