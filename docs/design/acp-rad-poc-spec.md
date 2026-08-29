@@ -101,30 +101,45 @@ Scripted scenarios, in order of demo value:
 
 ## 2. Architecture
 
+*(as built through slice 3, 2026-08-29)*
+
 ```
-            browser (Vite + React + TS)                      localhost
-┌─────────────────────────────────────────┐          ┌──────────────────────────┐
-│  apps/editor  — the ACP CLIENT          │          │ apps/bridge (Node, ~80 l)│
-│                                         │   WS     │  ws://…/acp?agent=<id>   │
-│  ┌───────────┐  ┌────────────────────┐  │◄────────►│  spawn + pipe ndjson     │
-│  │ Quill     │  │ acp client()       │  │  ndjson  │  (dumb pipe, no parsing) │
-│  │ editor    │◄─┤ session/update     │  │          └────────┬─────────────────┘
-│  │ ai-draft  │  │ request_permission │  │                   │ stdio
-│  │ blot      │  │ fs/read, fs/write  │  │          ┌────────▼─────────────────┐
-│  └─────▲─────┘  │ _rad/* ext         │  │          │ agents/rad-agent (uv)    │
-│        │        └─────────▲──────────┘  │          │  AgentServerACP subclass │
-│  ┌─────┴────────┐  ┌──────┴─────────┐   │          │  ├ AcpClientBackend ──┐  │
-│  │ ReportStore  │  │ Sidebar UI     │   │          │  ├ HITL: write/edit   │  │
-│  │ Delta⇄MD     │  │ chat·tools·plan│   │          │  ├ prompts/, tools    │  │
-│  │ virtual fs   │  │ permission·QA  │   │          │  └ model: OpenAI-compat│  │
-│  │ audit log    │  │ audit          │   │          └──────────────────────┼──┘
-│  └──────────────┘  └────────────────┘   │       fs/read_text_file ◄───────┘
-│  fixtures/ (3 synthetic cases)          │       fs/write_text_file (after permission)
-└─────────────────────────────────────────┘
-                       ▲                            ┌──────────────────────────┐
-                       └── same WS, agent=gemini ──►│ gemini --experimental-acp│ (stretch, L0)
-                                                    └──────────────────────────┘
+            browser (Vite + React 19 + TS)                        localhost
+┌───────────────────────────────────────────────┐        ┌────────────────────────────────┐
+│  apps/editor — the ACP CLIENT (trust boundary)│   WS   │ apps/bridge (Node + ws)        │
+│                                               │◄──────►│  ws://…/acp?agent=<id>         │
+│  ┌──────────────┐   ┌───────────────────────┐ │ 1 JSON │  agents.json: rad|claude|gemini│
+│  │ Quill report │   │ agent/connection.ts   │ │ /frame │  frames ⇄ NDJSON lines         │
+│  │ ai-insert    │   │  acp.client()         │ │        │  _rad/audit → audit/*.jsonl    │
+│  │ ai-delete    │◄─►│  session/update       │ │        │  BRIDGE_TRACE=1 method/id log  │
+│  │ ai-draft     │   │  request_permission   │ │        └───────┬───────────┬────────────┘
+│  │ HunkControls │   │  fs/read, fs/write    │ │                │ stdio     │ stdio
+│  └──────▲───────┘   │  _rad/audit (out)     │ │   ┌────────────▼─────────┐ │
+│         │           └──────────▲────────────┘ │   │ agents/rad-agent (uv)│ │
+│  ┌──────┴───────────┐   ┌──────┴────────────┐ │   │ RadReportAgentServer │ │
+│  │ report/          │   │ sidebar/          │ │   │ (deepagents-acp)     │ │
+│  │  overlay.ts      │   │  assistant-ui     │ │   │ ├ PermissionRewriting│ │
+│  │  proposals.ts    │   │  external-store   │ │   │ │ Client: accept /   │ │
+│  │  reportStore.ts  │   │  runtime          │ │   │ │ accept_edit/reject │ │
+│  │  (strips overlay)│   │  tool cards mirror│ │   │ ├ HITL edit/write   │ │
+│  ├──────────────────┤   │  audit tab        │ │   │ ├ AcpClientBackend  │ │
+│  │ acp-rad (pkg)    │   └───────────────────┘ │   │ │  read/ls/glob/grep │ │
+│  │  Delta⇄MD        │   ┌───────────────────┐ │   │ │  edit/write ───────┼─┼─► fs/write_text_file
+│  │  sections, hunks │   │ audit/log.ts      │ │   │ ├ skills (slice 4+) │ │
+│  │  namespace, zod  │   │  editor stamps    │ │   │ └ model: RAD_MODEL  │ │
+│  └──────────────────┘   └───────────────────┘ │   └──────────────────────┘ │
+│  fixtures/ cases · templates · snippets       │                            │
+└───────────────────────────────────────────────┘   ┌────────────────────────▼───────────┐
+                                                    │ Level 0 (stretch, slice 7)         │
+                                                    │  claude-agent-acp  (first)         │
+                                                    │  gemini --experimental-acp (second)│
+                                                    │  need on-disk mirror + file-watch; │
+                                                    │  editor pins set_mode=default,     │
+                                                    │  filters allow_always              │
+                                                    └────────────────────────────────────┘
 ```
+
+Wire, one proposal (slice 3): `session/prompt` → agent reads via `fs/read_text_file` → `tool_call{kind:edit, diff}` (rendered inline as hunks) → `session/request_permission{accept, accept_edit, reject}` → radiologist decides per hunk in the report → editor answers → agent re-reads (served the base text while the grant is open) → `fs/write_text_file` → editor compares with the decided buffer → `_meta.rad.outcome: applied | partial`.
 
 Trust boundary: everything that enforces INV-1 (sign-off), RO paths, `final` lock, and audit lives in **`apps/editor`**. The agent is untrusted; the bridge is a pipe.
 
