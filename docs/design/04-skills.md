@@ -229,7 +229,7 @@ click [Sign off]
 
 Rules: the gate is **advisory** — the agent is untrusted and must be unable to prevent a sign-off (outage, hallucinated flag, hosted latency in an ER); the override is what gets audited. What is deterministic (blanks, pending changes, amber) never goes to the model. A **short prelim** gets the deterministic gate only — it exists to beat the clock.
 
-💡 **Prelim and the agent gate.** Final always runs `/qa`. Prelim: run it too (recommended — the resident's prelim is what the clinician acts on), or exempt it like the SP because ER prelims are time-critical and the attending's review is a second gate anyway? Decide at slice-6 planning.
+**Prelim runs the agent gate too** (KS, 2026-08-30): the resident's prelim is what the clinician acts on, so both Prelim and Sign off pass through `/qa`; only the short prelim is exempt. The gate stays advisory at both transitions.
 
 ## 4. What each skill needs from the namespace
 
@@ -257,4 +257,3 @@ Rules: the gate is **advisory** — the agent is untrusted and must be unable to
 ## 7. Decisions needed
 
 - 💡 §3.3 — confirm that a FINDINGS/IMPRESSION contradiction is proposed on the IMPRESSION side (alternative: report only).
-- 💡 §3.5 — does Prelim run the agent gate, or only Sign off?

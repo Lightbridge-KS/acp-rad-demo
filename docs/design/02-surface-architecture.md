@@ -186,7 +186,7 @@ stateDiagram-v2
     note right of final: write-lock — every fs/write ⇒ -32003, /qa stays available
 ```
 
-`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. **Prelim** and **Sign off** pass through the QA gate (04 §3.5): a deterministic check (no pending changes, no unreviewed text, no `___` blanks) that refuses, then `/qa` whose flags are advisory — *Sign off anyway* is always available and audited (`qa.passed` · `qa.overridden` · `qa.skipped`). An SP skips the agent gate. Roles (resident: draft/preliminary; attending: also final) are display-only in the PoC.
+`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. **Prelim** and **Sign off** both pass through the QA gate (04 §3.5; KS, 2026-08-30): a deterministic check (no pending changes, no unreviewed text, no `___` blanks) that refuses, then `/qa` whose flags are advisory — *Sign off anyway* is always available and audited (`qa.passed` · `qa.overridden` · `qa.skipped`). An SP skips the agent gate. Roles (resident: draft/preliminary; attending: also final) are display-only in the PoC.
 
 ### 5.3 Connection & turn
 
@@ -214,5 +214,4 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 ## 8. Decisions Needed
 
 - 💡 **`/sign-off`**: an editor command in the same registry (fits "one list, three surfaces") or only an action on the status pill (fits "status transitions are explicit, not commands")? Decide at slice-6 planning; the registry design must not preclude either.
-- 💡 **Prelim and the QA gate**: run `/qa` at Prelim as well as Sign off (recommended), or exempt Prelim like the short prelim? See 04 §3.5. Decide at slice-6 planning.
 - 💡 **Case switching before slice 6**: `?case=<id>` is the cheapest way to reach the prior-bearing cases for `/compare`; confirm it is acceptable demo UX until the worklist lands, or pull the switcher forward.
