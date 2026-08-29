@@ -25,7 +25,9 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 
 ## Deferred
 
-- **assistant-ui as the sidebar frontend** (KS idea, 2026-08-29) — evaluate `@assistant-ui/react` (cloned at `~/OSS/ChatUi/assistant-ui`, see its `_docs/`) as a replacement for the hand-rolled sidebar. Explore **at slice 3**, when the sidebar grows tool cards, permission cards, and plan rendering — that is where a chat-UI library earns or fails its keep. Feasibility questions to answer then: can its runtime be driven from ACP `session/update` (`useExternalStoreRuntime` / `useLocalRuntime`), can `tool_call` + `request_permission` map onto its tool-call UI and human-in-the-loop parts, and does it stay framework-light in Vite. Not before slice 3 — don't explore yet.
+- ~~assistant-ui as the sidebar frontend~~ — **resolved 2026-08-29: ADOPT-PARTIAL** (KS). See `docs/adr/0001-sidebar-on-assistant-ui.md`; spike record `_playground/2026-08-29_assistant-ui-spike/NOTES.md`. Lands in slice 3.
+- **Rename `RadAgent*` → `RadReportAgent*`** (KS, 2026-08-29: "implies the purpose more precisely"; timing free). Do it at the start of slice 3 (`server.py` class, `main.py`, tests, logs); the package/CLI name `rad-agent` can stay.
+- **Wireframe taste adjustments** (KS, 2026-08-29, applied to the canvas): no action bar — commands live behind a `Commands ▾` menu in the editor toolbar and a Notion-style in-editor `/` menu (Suggested · Snippets = instant editor inserts · Skills = agent proposals); the sidebar composer's `/` opens the same list. Slice 3/4 build this instead of a bar.
 - Fixture `ct-brain-er-stroke` (refined by KS) now carries a filled IMPRESSION; scenario 1 (draft impression) needs an empty one. Resolve at slice 3: a cleared-impression variant or an in-demo "clear section" action.
 - Revise `docs/ideas/acp-rad-protocol-proposal.md` to match the design: §4.2 grammar → label-lines; drop §8.3 `section_patch`; §5 `reportStatus` enum; companion line "Flutter Quill" → QuillJS; `ramaai-dev` → `radrama-ai`.
 - Canonical grammar v0.1 does not escape literal `*`/`_` (reports don't use them). Revisit only if a real report needs it.
