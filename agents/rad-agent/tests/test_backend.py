@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pytest
 from acp.exceptions import RequestError
 
-from rad_agent.backend import WRITE_REFUSED, AcpClientBackend
+from rad_agent.backend import AcpClientBackend
 
 FINDINGS = "**FINDINGS:**\n**Liver:** Normal.\n**Spleen:** Normal.\n"
 FILES = {
@@ -24,15 +24,31 @@ class _Resp:
     content: str
 
 
+@dataclass
+class _WriteResp:
+    field_meta: dict | None = None
+
+
 class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.files = dict(FILES)
+        self.writes: list[tuple[str, str]] = []
+        self.write_meta: dict | None = {"rad": {"outcome": "applied"}}
+        self.refuse_writes_to: set[str] = {"/templates/cxr-pa.md"}
 
     async def read_text_file(self, session_id, path, line=None, limit=None):
         self.calls.append((session_id, path))
-        if path not in FILES:
+        if path not in self.files:
             raise RequestError(-32004, f"not found: {path}")
-        return _Resp(FILES[path])
+        return _Resp(self.files[path])
+
+    async def write_text_file(self, session_id, path, content):
+        if path in self.refuse_writes_to:
+            raise RequestError(-32003, f"read-only: {path}")
+        self.writes.append((path, content))
+        self.files[path] = content
+        return _WriteResp(self.write_meta)
 
 
 @pytest.fixture
@@ -97,7 +113,35 @@ async def test_agrep_reads_candidates_and_honours_max_count(backend: AcpClientBa
     assert bad.error is not None
 
 
-async def test_writes_are_refused(backend: AcpClientBackend) -> None:
-    w = await backend.awrite("/worklist/A/report.md", "x")
-    e = await backend.aedit("/worklist/A/report.md", "a", "b")
-    assert w.error == WRITE_REFUSED and e.error == WRITE_REFUSED
+async def test_awrite_goes_through_the_client(backend: AcpClientBackend) -> None:
+    r = await backend.awrite("/worklist/A/sections/findings.md", "**FINDINGS:**\nnew\n")
+    assert r.error is None and r.path == "/worklist/A/sections/findings.md"
+    writes = backend._conn.writes  # type: ignore[attr-defined]
+    assert writes == [("/worklist/A/sections/findings.md", "**FINDINGS:**\nnew\n")]
+
+
+async def test_aedit_is_read_modify_write(backend: AcpClientBackend) -> None:
+    path = "/worklist/A/sections/findings.md"
+    r = await backend.aedit(path, "**Liver:** Normal.", "**Liver:** Enlarged.")
+    assert r.error is None and r.occurrences == 1
+    ((path, content),) = backend._conn.writes  # type: ignore[attr-defined]
+    assert path == "/worklist/A/sections/findings.md"
+    assert content == "**FINDINGS:**\n**Liver:** Enlarged.\n**Spleen:** Normal.\n"
+
+
+async def test_aedit_errors_are_returned_not_raised(backend: AcpClientBackend) -> None:
+    missing = await backend.aedit("/worklist/A/sections/findings.md", "nope", "x")
+    assert missing.error is not None and "not found" in missing.error
+    ambiguous = await backend.aedit("/worklist/A/sections/findings.md", "Normal.", "x")
+    assert ambiguous.error is not None and "2 times" in ambiguous.error
+    path = "/worklist/A/sections/findings.md"
+    replaced = await backend.aedit(path, "Normal.", "x", replace_all=True)
+    assert replaced.error is None and replaced.occurrences == 2
+    unknown_file = await backend.aedit("/worklist/A/sections/liver.md", "a", "b")
+    assert unknown_file.error is not None
+
+
+async def test_client_refusal_surfaces_as_error(backend: AcpClientBackend) -> None:
+    r = await backend.awrite("/templates/cxr-pa.md", "x")
+    assert r.error is not None and "read-only" in r.error
+    assert backend._conn.writes == []  # type: ignore[attr-defined]

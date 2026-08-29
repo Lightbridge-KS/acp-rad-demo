@@ -92,14 +92,20 @@ describe("ReportStore", () => {
       }
     }
   });
-  it("rejects every write with -32003 in this slice", () => {
-    for (const p of ["/worklist/ACC0000001/sections/impression.md", "/templates/ct-brain-er.md"]) {
-      try {
-        store.write(p, "x");
-        expect.unreachable();
-      } catch (e) {
-        expect((e as RadError).code).toBe(RAD_ERRORS.FORBIDDEN);
-      }
+  it("assertWritable: RW paths pass, RO paths -32003, unknown -32004", () => {
+    expect(() => store.assertWritable("/worklist/ACC0000001/sections/impression.md")).not.toThrow();
+    expect(() => store.assertWritable("/worklist/ACC0000001/report.md")).not.toThrow();
+    try {
+      store.assertWritable("/templates/ct-brain-er.md");
+      expect.unreachable();
+    } catch (e) {
+      expect((e as RadError).code).toBe(RAD_ERRORS.FORBIDDEN);
+    }
+    try {
+      store.assertWritable("/nope.md");
+      expect.unreachable();
+    } catch (e) {
+      expect((e as RadError).code).toBe(RAD_ERRORS.NOT_FOUND);
     }
   });
   it("manifest lists only present sections", () => {

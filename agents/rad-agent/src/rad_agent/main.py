@@ -11,7 +11,7 @@ from acp import run_agent
 from dotenv import load_dotenv
 
 from rad_agent.config import model_spec
-from rad_agent.server import RadAgentServer
+from rad_agent.server import RadReportAgentServer
 
 
 def main() -> None:
@@ -26,7 +26,7 @@ def main() -> None:
     # AgentServerACP leaves optional ACP methods (authenticate, fork/list/resume/close
     # session) unimplemented; the SDK router answers them with "method not found".
     # deepagents-acp instantiates it the same way — runtime-safe, only mypy objects.
-    server = RadAgentServer()  # type: ignore[abstract]
+    server = RadReportAgentServer()  # type: ignore[abstract]
     asyncio.run(run_agent(server))
 
 

@@ -1,5 +1,6 @@
 {
   "title": "EMERGENCY MDCT OF THE BRAIN",
+  "demo": { "start": "impression_empty" },
   "session": {
     "accession": "ACC0000001",
     "modality": "CT",

@@ -1,38 +1,48 @@
-import Quill from "quill";
+import Quill, { type Delta } from "quill";
 import type { Op } from "quill";
 import "quill/dist/quill.snow.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { OVERLAY_FORMATS, registerReportBlots } from "./blots.ts";
+import { afterUserChange } from "./overlayQuill.ts";
 
 /**
- * Formats a report may contain. Anything else (pasted or programmatic) is
- * stripped by Quill — the report document model is a whitelist, not a
- * free-for-all. Mirrors the canonical grammar (bold, italic, lists). `ai-draft`
- * joins this list in slice 3.
+ * Formats a report may contain. Anything else (pasted or programmatic) is stripped by
+ * Quill — the report document model is a whitelist. Mirrors the canonical grammar (bold,
+ * italic, lists) plus the proposal overlay and draft marks.
  */
-const REPORT_FORMATS = ["bold", "italic", "list"];
+const REPORT_FORMATS = ["bold", "italic", "list", ...OVERLAY_FORMATS];
 
 type Props = {
   /** Canonical report as Delta ops (`markdownToDelta(reportMarkdown)`). */
   initialOps: Op[];
   onReady?: (quill: Quill) => void;
+  /** Fires after every user edit (already post-processed: no inherited marks, drafts cleared on touched lines). */
+  onUserChange?: (quill: Quill, change: Delta) => void;
+  /** Overlay UI (hunk controls) rendered above the editor; receives a tick that changes on every text-change. */
+  overlay?: (quill: Quill, tick: number) => ReactNode;
 };
 
 /**
- * Uncontrolled Quill mount (the canonical React pattern from Quill's own
- * playground): Quill owns the DOM inside the container; React never re-renders it.
- * Re-mount with a `key` to load a different report.
+ * Uncontrolled Quill mount (the canonical React pattern from Quill's own playground):
+ * Quill owns the DOM inside the container; React never re-renders it. Re-mount with a
+ * `key` to load a different report.
  */
-export function ReportEditor({ initialOps, onReady }: Props) {
+export function ReportEditor({ initialOps, onReady, onUserChange, overlay }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onUserChangeRef = useRef(onUserChange);
+  onUserChangeRef.current = onUserChange;
   const initialOpsRef = useRef(initialOps);
+  const [quill, setQuill] = useState<Quill | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    registerReportBlots();
     const editorEl = container.appendChild(container.ownerDocument.createElement("div"));
-    const quill = new Quill(editorEl, {
+    const q = new Quill(editorEl, {
       theme: "snow",
       debug: "warn",
       placeholder: "Report…",
@@ -43,12 +53,26 @@ export function ReportEditor({ initialOps, onReady }: Props) {
         history: { userOnly: true },
       },
     });
-    quill.setContents(initialOpsRef.current, "api");
-    onReadyRef.current?.(quill);
+    q.setContents(initialOpsRef.current, "api");
+    q.on("text-change", (change, _old, source) => {
+      if (source === "user") {
+        afterUserChange(q, change);
+        onUserChangeRef.current?.(q, change);
+      }
+      setTick((t) => t + 1);
+    });
+    setQuill(q);
+    onReadyRef.current?.(q);
     return () => {
       container.replaceChildren();
+      setQuill(null);
     };
   }, []);
 
-  return <div ref={containerRef} className="report-editor flex h-full flex-col" />;
+  return (
+    <div className="relative flex h-full flex-col">
+      <div ref={containerRef} className="report-editor flex h-full flex-col" />
+      {quill && overlay ? <div className="pointer-events-none absolute inset-0">{overlay(quill, tick)}</div> : null}
+    </div>
+  );
 }

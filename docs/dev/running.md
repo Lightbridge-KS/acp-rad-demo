@@ -33,7 +33,7 @@ Agent logs go to **stderr** (shown in the bridge's terminal); stdout is the JSON
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `RAD_MODEL` | `openai:gpt-5` | LangChain provider string (`openai:…`, `anthropic:…`) |
+| `RAD_MODEL` | `openai:gpt-5.6-terra` | LangChain provider string (`openai:…`, `anthropic:…`) |
 | `RAD_MODEL_BASE_URL` | unset | If set, uses `ChatOpenAI(base_url=…)` — any OpenAI-compatible endpoint (Ollama: `http://localhost:11434/v1`) |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | — | Provider keys; falls back to `ollama` when a base URL is set |
 | `RAD_LOG_LEVEL` | `INFO` | Python logging level (stderr) |
@@ -54,6 +54,20 @@ A `.env` in `agents/rad-agent/` is also read (`python-dotenv`), gitignored.
 just check            # dry: tsc, vitest, ruff, mypy, pytest
 just smoke            # live: starts the bridge, runs a headless ACP client end-to-end (needs an LLM)
 ```
+
+## Tracing the wire
+
+`BRIDGE_TRACE=1 just dev` logs one line per JSON-RPC frame in each direction (method and id only,
+never params) — the quickest way to see whether a `session/update`, `request_permission` or
+`fs/write_text_file` actually crossed the bridge.
+
+## Audit trail
+
+The editor stamps an `AuditRecord` for every consequential event (reads, proposals, per-hunk
+decisions, permission answers, writes with their outcome, draft clears, cancels) and sends it up
+the ACP connection as a `_rad/audit` notification. The bridge intercepts those frames — the one
+thing it ever parses — and appends them to **`audit/{accession}.jsonl`** at the repo root
+(`AUDIT_DIR` overrides; gitignored). The sidebar's *Audit* tab shows the same records live.
 
 ## Troubleshooting
 

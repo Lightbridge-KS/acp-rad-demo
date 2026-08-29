@@ -10,7 +10,7 @@
  *   GET /health           → 200 "ok"
  */
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,10 +24,45 @@ const agents: Record<string, AgentSpec> = JSON.parse(
   readFileSync(path.join(bridgeRoot, "agents.json"), "utf8"),
 );
 const PORT = Number(process.env.BRIDGE_PORT ?? 8787);
+/** BRIDGE_TRACE=1 logs one line per frame (method/id only, never params) in both directions. */
+const TRACE = process.env.BRIDGE_TRACE === "1";
+
+function traceFrame(dir: "→agent" | "←agent", line: string): void {
+  if (!TRACE) return;
+  try {
+    const m = JSON.parse(line) as { method?: string; id?: unknown; result?: unknown; error?: unknown };
+    const kind = m.method ? `${m.method}${m.id !== undefined ? ` #${String(m.id)}` : ""}` : m.error ? `error #${String(m.id)}` : `result #${String(m.id)}`;
+    log(`${dir} ${kind}`);
+  } catch {
+    log(`${dir} (unparsable ${line.length} bytes)`);
+  }
+}
 
 const log = (msg: string): void => {
   process.stderr.write(`[bridge ${new Date().toISOString()}] ${msg}\n`);
 };
+
+const AUDIT_METHOD = "_rad/audit";
+const AUDIT_DIR = path.resolve(process.env.AUDIT_DIR ?? path.join(bridgeRoot, "../../audit"));
+
+/** Append an editor audit record to audit/{accession}.jsonl. Returns false if the frame isn't one. */
+function persistAudit(frame: string): boolean {
+  let msg: { method?: string; params?: { accession?: string } };
+  try {
+    msg = JSON.parse(frame) as typeof msg;
+  } catch {
+    return false;
+  }
+  if (msg.method !== AUDIT_METHOD) return false;
+  const accession = (msg.params?.accession ?? "unknown").replace(/[^A-Za-z0-9_-]/g, "_");
+  try {
+    mkdirSync(AUDIT_DIR, { recursive: true });
+    appendFileSync(path.join(AUDIT_DIR, `${accession}.jsonl`), `${JSON.stringify(msg.params)}\n`);
+  } catch (err) {
+    log(`audit append failed: ${(err as Error).message}`);
+  }
+  return true;
+}
 
 const server = createServer((req, res) => {
   if (req.url === "/health") {
@@ -66,13 +101,20 @@ wss.on("connection", (ws, req) => {
     while ((nl = pending.indexOf("\n")) >= 0) {
       const line = pending.slice(0, nl).trim();
       pending = pending.slice(nl + 1);
-      if (line && ws.readyState === WebSocket.OPEN) ws.send(line);
+      if (!line) continue;
+      traceFrame("←agent", line);
+      if (ws.readyState === WebSocket.OPEN) ws.send(line);
     }
   });
 
-  // browser → agent: one frame → one line
+  // browser → agent: one frame → one line.
+  // The one thing the bridge does look at: editor-stamped audit records (`_rad/audit`)
+  // are persisted here and never reach the agent (design §3.2).
   ws.on("message", (data) => {
-    child.stdin.write(`${data.toString()}\n`);
+    const text = data.toString();
+    if (text.includes(AUDIT_METHOD) && persistAudit(text)) return;
+    traceFrame("→agent", text);
+    child.stdin.write(`${text}\n`);
   });
 
   ws.on("close", (code, reason) => {

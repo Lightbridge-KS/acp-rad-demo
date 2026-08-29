@@ -1,63 +1,108 @@
 import type Quill from "quill";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { markdownToDelta } from "acp-rad";
+import { markdownToDelta, type AuditRecord } from "acp-rad";
 import { connectAgent, type AgentHandle } from "./agent/connection.ts";
-import { agentReducer, initialAgentState } from "./agent/store.ts";
+import { AuditLog } from "./audit/log.ts";
 import { defaultCase } from "./fixtures/index.ts";
+import { HunkControls } from "./report/HunkControls.tsx";
 import { ReportEditor } from "./report/ReportEditor.tsx";
+import { clearAllDrafts, decideHunkOps, discardHunksOps, draftLineCount, overlayOps } from "./report/overlay.ts";
+import { applyOps, currentOps } from "./report/overlayQuill.ts";
+import { ProposalStore, type Proposal, type Verb } from "./report/proposals.ts";
 import { makeReportStore } from "./report/reportStore.ts";
-import { Sidebar } from "./sidebar/Sidebar.tsx";
+import { Sidebar, type AgentPort, type HeaderState } from "./sidebar/Sidebar.tsx";
+import { diffOf, initialSidebarState, sidebarReducer } from "./sidebar/store.ts";
 
 const BRIDGE_URL: string =
   (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? "ws://localhost:8787/acp?agent=rad";
 
-const shortPath = (p: string) => p.replace(/^\/worklist\/[^/]+\//, "");
-
 export default function App() {
   const fixture = defaultCase;
-  const [state, dispatch] = useReducer(agentReducer, initialAgentState);
+  const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
+  const [header, setHeader] = useState<HeaderState>({ status: "disconnected" });
   const [quill, setQuill] = useState<Quill | null>(null);
+  const [proposalList, setProposalList] = useState<Proposal[]>([]);
+  const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
+  const [draftCount, setDraftCount] = useState(0);
   const agentRef = useRef<AgentHandle | null>(null);
   const initialOps = useMemo(() => markdownToDelta(fixture.reportMarkdown), [fixture]);
+  const proposals = useMemo(() => new ProposalStore(fixture.session.accession), [fixture]);
+  const audit = useMemo(() => new AuditLog(), [fixture]);
+
+  // Render a proposal as tracked changes; report anchors that could not be found.
+  const renderProposal = useCallback(
+    (p: Proposal) => {
+      if (!quill) return;
+      const { ops, conflicts } = overlayOps(currentOps(quill), p.section, p.hunks);
+      applyOps(quill, ops);
+      if (conflicts.length) proposals.markConflicts(p.toolCallId, conflicts);
+    },
+    [quill, proposals],
+  );
+
+  // ProposalStore events → Quill, sidebar mirror, audit.
+  useEffect(() => {
+    const refresh = () => setProposalList(proposals.list());
+    return proposals.subscribe((e) => {
+      switch (e.type) {
+        case "proposed":
+          audit.record("proposal.received", { toolCallId: e.proposal.toolCallId, path: e.proposal.path, outcome: `${e.proposal.hunks.length} hunks` });
+          break;
+        case "decided":
+          if (quill) applyOps(quill, decideHunkOps(currentOps(quill), e.hunkId, e.verb, e.proposal.toolCallId));
+          audit.record(`hunk.${e.verb}`, { toolCallId: e.proposal.toolCallId, hunkId: e.hunkId, path: e.proposal.path });
+          break;
+        case "answered":
+          if (e.answer.outcome === "selected") dispatch({ type: "permission_resolved", toolCallId: e.proposal.toolCallId, optionId: e.answer.optionId });
+          else dispatch({ type: "permission_cancelled", toolCallId: e.proposal.toolCallId });
+          break;
+        case "cancelled":
+          if (quill) applyOps(quill, discardHunksOps(currentOps(quill), e.proposal.hunks.map((h) => h.id)));
+          dispatch({ type: "permission_cancelled", toolCallId: e.proposal.toolCallId });
+          break;
+        case "write":
+          break;
+      }
+      if (quill) setDraftCount(draftLineCount(currentOps(quill)));
+      refresh();
+    });
+  }, [proposals, audit, quill]);
+
+  useEffect(() => audit.subscribe(() => setAuditRecords([...audit.records])), [audit]);
 
   // Connect once the editor exists: the ReportStore serves fs/* from live Quill state.
   useEffect(() => {
     if (!quill) return;
     let cancelled = false;
     const store = makeReportStore(quill, fixture);
-    dispatch({ type: "status", status: "connecting" });
-    connectAgent(BRIDGE_URL, fixture.session, store, {
+    setHeader({ status: "connecting" });
+    dispatch({ type: "reset" });
+    connectAgent(BRIDGE_URL, fixture.session, store, proposals, audit, {
       onUpdate: (u) => {
-        switch (u.sessionUpdate) {
-          case "agent_message_chunk":
-            if (u.content.type === "text") dispatch({ type: "chunk", role: "agent", text: u.content.text });
-            break;
-          case "agent_thought_chunk":
-            if (u.content.type === "text") dispatch({ type: "chunk", role: "thought", text: u.content.text });
-            break;
-          case "tool_call":
-            dispatch({
-              type: "tool_call",
-              card: { toolCallId: u.toolCallId, title: u.title, kind: u.kind ?? undefined, status: u.status ?? undefined },
-            });
-            break;
-          case "tool_call_update":
-            dispatch({
-              type: "tool_call_update",
-              toolCallId: u.toolCallId,
-              patch: { title: u.title ?? undefined, kind: u.kind ?? undefined, status: u.status ?? undefined },
-            });
-            break;
-          default:
-            dispatch({ type: "system", text: `↳ ${u.sessionUpdate}` });
+        dispatch({ type: "update", update: u });
+        // A diff on an edit tool call becomes a proposal the moment it arrives (before the permission request).
+        if ((u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") && !proposals.get(u.toolCallId)) {
+          const diff = diffOf(u.content);
+          if (diff) {
+            const p = safe(() => proposals.fromDiff(u.toolCallId, diff, store.read(diff.path)));
+            if (p) renderProposal(p);
+          } else if (u.sessionUpdate === "tool_call_update" && u.kind === "edit") {
+            const raw = u.rawInput as { file_path?: string; content?: string } | undefined;
+            if (raw?.file_path && typeof raw.content === "string") {
+              const p = safe(() => proposals.fromWrite(u.toolCallId, raw.file_path!, raw.content!, store.read(raw.file_path!)));
+              if (p) renderProposal(p);
+            }
+          }
         }
       },
-      onFsRead: (path) => dispatch({ type: "system", text: `⇢ served ${shortPath(path)}` }),
+      onPermission: (toolCallId, options) => dispatch({ type: "permission_requested", toolCallId, options }),
+      onUnsolicited: (p) => {
+        renderProposal(p);
+      },
       onClosed: (reason) => {
         if (cancelled) return; // this effect's own teardown (e.g. StrictMode's first mount)
         agentRef.current = null;
-        dispatch({ type: "status", status: "disconnected" });
-        dispatch({ type: "system", text: `disconnected: ${reason}` });
+        setHeader((h) => ({ ...h, status: "disconnected", error: reason }));
       },
     })
       .then((handle) => {
@@ -66,57 +111,106 @@ export default function App() {
           return;
         }
         agentRef.current = handle;
-        dispatch({ type: "initialized", agentName: handle.agentName, level: handle.level, model: handle.model });
-        dispatch({ type: "session", sessionId: handle.sessionId });
-        dispatch({
-          type: "system",
-          text: `session ${handle.sessionId.slice(0, 8)} · ${fixture.session.accession} · ${handle.manifest.length} files`,
-        });
+        setHeader({ status: "ready", agentName: handle.agentName, level: handle.level, model: handle.model });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        dispatch({ type: "error", message: err instanceof Error ? err.message : String(err) });
+        setHeader({ status: "error", error: err instanceof Error ? err.message : String(err) });
       });
     return () => {
       cancelled = true;
       agentRef.current?.close();
       agentRef.current = null;
     };
-  }, [quill, fixture]);
+  }, [quill, fixture, proposals, audit, renderProposal]);
 
-  const send = useCallback((text: string) => {
-    const agent = agentRef.current;
-    if (!agent) return;
-    dispatch({ type: "user", text });
-    agent
-      .prompt(text)
-      .then((res) => {
-        dispatch({ type: "system", text: `↩ ${res.stopReason}` });
-        dispatch({ type: "status", status: "ready" });
-      })
-      .catch((err: unknown) => {
-        dispatch({ type: "error", message: err instanceof Error ? err.message : String(err) });
-      });
-  }, []);
+  const agentPort = useMemo<AgentPort | null>(
+    () =>
+      header.status === "ready"
+        ? {
+            prompt: async (text) => {
+              const agent = agentRef.current;
+              if (!agent) return;
+              try {
+                const res = await agent.prompt(text);
+                dispatch({ type: "turn_end", stopReason: res.stopReason });
+              } catch (err) {
+                dispatch({ type: "turn_end", stopReason: "error" });
+                setHeader((h) => ({ ...h, error: err instanceof Error ? err.message : String(err) }));
+              }
+            },
+            cancel: async () => {
+              await agentRef.current?.cancel();
+            },
+          }
+        : null,
+    [header.status],
+  );
 
-  const stop = useCallback(() => {
-    void agentRef.current?.cancel();
-  }, []);
+  const decide = useCallback((toolCallId: string, hunkId: string, verb: Verb) => proposals.decide(toolCallId, hunkId, verb), [proposals]);
+  const pending = proposalList.filter((p) => p.state === "pending");
+  const pendingHunks = pending.reduce((n, p) => n + p.hunks.filter((h) => p.states[h.id] === "pending").length, 0);
 
   return (
-    <div className="grid h-full grid-cols-[minmax(0,1fr)_380px] grid-rows-[auto_minmax(0,1fr)]">
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_400px] grid-rows-[auto_minmax(0,1fr)]">
       <header className="col-span-2 flex items-center gap-3 border-b border-gray-200 px-4 py-2 text-sm">
         <span className="font-semibold">ACP-Rad</span>
         <span className="text-gray-500">{fixture.title}</span>
         <span className="text-xs text-gray-400">{fixture.session.accession}</span>
-        <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-          {fixture.session.reportStatus} · {fixture.session.phiBoundary}
+        <span className="ml-auto flex items-center gap-2 text-xs">
+          {pendingHunks > 0 && (
+            <span className="flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-50 px-2 py-0.5">
+              {pendingHunks} pending hunk{pendingHunks === 1 ? "" : "s"}
+              <button type="button" className="font-medium underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "accept_edit"))}>
+                Insert all as draft
+              </button>
+              <button type="button" className="underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "reject"))}>
+                Discard all
+              </button>
+            </span>
+          )}
+          {draftCount > 0 && (
+            <span className="flex items-center gap-2 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5">
+              {draftCount} unreviewed AI draft line{draftCount === 1 ? "" : "s"}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => {
+                  if (!quill) return;
+                  applyOps(quill, clearAllDrafts(currentOps(quill)));
+                  audit.record("draft.cleared", { outcome: "all" });
+                  setDraftCount(0);
+                }}
+              >
+                Mark all reviewed
+              </button>
+            </span>
+          )}
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
+            {fixture.session.reportStatus} · {fixture.session.phiBoundary}
+          </span>
         </span>
       </header>
       <main className="min-h-0 overflow-hidden">
-        <ReportEditor key={fixture.id} initialOps={initialOps} onReady={setQuill} />
+        <ReportEditor
+          key={fixture.id}
+          initialOps={initialOps}
+          onReady={setQuill}
+          onUserChange={(q) => {
+            setDraftCount(draftLineCount(currentOps(q)));
+          }}
+          overlay={(q, tick) => <HunkControls quill={q} proposals={proposalList} tick={tick} onDecide={decide} />}
+        />
       </main>
-      <Sidebar state={state} onSend={send} onStop={stop} />
+      <Sidebar state={state} dispatch={dispatch} header={header} agent={agentPort} audit={auditRecords} />
     </div>
   );
+}
+
+function safe<T>(fn: () => T): T | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
 }

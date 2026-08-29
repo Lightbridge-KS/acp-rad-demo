@@ -125,6 +125,47 @@ export const zRadPromptMeta = z.object({
 export type RadPromptMeta = z.infer<typeof zRadPromptMeta>;
 
 // ---------------------------------------------------------------------------
+// Permission verbs (proposal §7.2) and write outcomes (design §5.7)
+// ---------------------------------------------------------------------------
+
+/** The clinical verbs a rad-aware agent offers; Level 0 agents map onto them by option kind. */
+export const CLINICAL_VERBS = ["accept", "accept_edit", "reject"] as const;
+export const zClinicalVerb = z.enum(CLINICAL_VERBS);
+export type ClinicalVerb = z.infer<typeof zClinicalVerb>;
+
+/** `fs/write_text_file` response `_meta.rad` — what the Client did with the agent's write. */
+export const zRadWriteOutcome = z.object({
+  outcome: z.enum(["applied", "partial"]),
+  toolCallId: z.string().optional(),
+  accepted: z.array(z.string()).optional(),
+  discarded: z.array(z.string()).optional(),
+});
+export type RadWriteOutcome = z.infer<typeof zRadWriteOutcome>;
+
+// ---------------------------------------------------------------------------
+// Audit record (proposal §9.2) — stamped by the Client, never trusted from the agent
+// ---------------------------------------------------------------------------
+
+export const zAuditRecord = z.object({
+  ts: z.string(),
+  sessionId: z.string(),
+  accession: z.string(),
+  actor: z.object({ userId: z.string(), role: z.enum(["radiologist", "resident", "system"]) }),
+  agent: z.object({ name: z.string(), version: z.string().optional(), level: z.union([z.literal(0), z.literal(1), z.literal(2)]) }),
+  /** e.g. "fs.read", "permission.request", "permission.accept_edit", "fs.write.applied", "draft.cleared". */
+  event: z.string(),
+  path: z.string().optional(),
+  toolCallId: z.string().optional(),
+  hunkId: z.string().optional(),
+  argsHash: z.string().optional(),
+  outcome: z.string().optional(),
+});
+export type AuditRecord = z.infer<typeof zAuditRecord>;
+
+/** `_`-prefixed notification the Client sends up the same connection; the bridge persists it. */
+export const AUDIT_METHOD = "_rad/audit";
+
+// ---------------------------------------------------------------------------
 // Errors (proposal §10)
 // ---------------------------------------------------------------------------
 

@@ -18,9 +18,20 @@ const metas = import.meta.glob("../../fixtures/*/meta.json", {
 type CaseMetaJson = {
   title: string;
   session: unknown;
+  /** Demo start state applied at load; the file itself stays the complete, reviewed case. */
+  demo?: { start?: "complete" | "impression_empty" };
   patient?: Record<string, unknown>;
   study?: Record<string, unknown>;
 };
+
+/** Blank the IMPRESSION items so scenario 1 ("draft the impression") has something to draft. */
+export function applyStartState(markdown: string, start: "complete" | "impression_empty" | undefined): string {
+  if (start !== "impression_empty") return markdown;
+  const lines = markdown.replace(/\n$/, "").split("\n");
+  const i = lines.findIndex((l) => /^\*\*IMPRESSION:\*\*/.test(l));
+  if (i < 0) return markdown;
+  return `${[...lines.slice(0, i + 1), "- ..."].join("\n")}\n`;
+}
 
 export type CaseFixture = {
   id: string;
@@ -56,13 +67,13 @@ export const cases: CaseFixture[] = Object.entries(metas)
         .filter(([p]) => p.startsWith(`${base}priors/`))
         .map(([p, text]) => [idOf(p), text]),
     );
-    const { session: _s, ...rest } = meta;
+    const { session: _s, demo, ...rest } = meta;
     return {
       id,
       title: meta.title,
       session: zRadSessionMeta.parse(meta.session),
       meta: rest as Record<string, unknown>,
-      reportMarkdown: md[`${base}report.md`] ?? "\n",
+      reportMarkdown: applyStartState(md[`${base}report.md`] ?? "\n", demo?.start),
       priors,
     };
   })

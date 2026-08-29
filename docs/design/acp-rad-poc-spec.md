@@ -159,7 +159,7 @@ fs/write_text_file(path, content) ──►
    RO path / final → -32003
 ```
 
-So proposal §4.3 ("write = proposal") becomes the **fallback**, not the only path — agents that ask first (deepagents-acp, Claude, Gemini) are not asked twice. **Decided:** path + expected-content match, single-use, 60 s TTL.
+So proposal §4.3 ("write = proposal") becomes the **fallback**, not the only path — agents that ask first (deepagents-acp, Claude, Gemini) are not asked twice. **Decided:** grant = path + expected content (all hunks applied), single-use; a differing write with a decided proposal is a **partial** ack, not a rejection (§5.7).
 
 **`ai-draft` lifecycle — Decided:** a user edit anywhere in a line clears the mark on that whole line (organ line / bullet = the review unit); plus "Mark reviewed" per proposal (tool card) and "Mark all reviewed" (toolbar). Each clear is an audit event.
 
@@ -249,7 +249,18 @@ The real templates (`_temp/reports/`) use `**LABEL:** text` lines, a blank line 
 
 Three options were weighed: **A** sidebar-centric review (diff card in the sidebar, editor updates on accept), **B** inline tracked changes (proposal rendered *in the report* as `~~deleted~~` / `++inserted++` hunks with per-hunk accept/reject), **C** action-first proposal queue (no chat by default). Decided: **B for the judgment surface, C's action bar for the named moves, A's sidebar as transcript + tool cards + QA alerts + audit.** The sidebar mirrors decisions; it never owns them.
 
-Mechanics: a proposal = one or more *hunks* `{toolCallId, section, oldText, newText}` from `tool_call_update.content[type=diff]`. The editor renders hunks as overlays (two custom inline blots, `ai-delete` and `ai-insert`, plus a hunk model) — the pending text is **rendered but not in the buffer** (INV-1) — with a floating `[Insert] [Insert as draft] [Discard]` control per hunk. Accept re-anchors by `old_string` (INV-2), applies the change, and resolves the pending `session/request_permission` (`accept`/`accept_edit`/`reject`). Fallback if the overlay proves too costly in slice 3: option A, with nothing else changing.
+Mechanics (settled at slice 3 planning, 2026-08-29):
+
+- **Proposal** = the diff of one `tool_call_update.content[type=diff]` (`oldText`/`newText` are the agent's `old_string`/`new_string` snippets; the diff arrives *before* the permission request). `write_file` carries no diff — the editor synthesizes one from the current file vs `rawInput.content`.
+- **Hunk** = a contiguous run of changed canonical **lines** (ADR 0002; word-level kept as the alternative). Overlay: old lines struck (`ai-delete`), new lines inserted after them (`ai-insert`), parsed through the canonical converter so bold/bullets render. Anchor `(section, oldLines[])`; unfindable ⇒ `conflict`.
+- **Overlays live in the Quill Delta as attributes**; the `ReportStore` strips them (`stripOverlays`) before canonicalization, so the pending text is **rendered but never in the buffer** the agent or the audit sees (INV-1). User typing next to an overlay inherits nothing (a `text-change(user)` pass strips overlay attributes from typed ranges and clears `ai-draft` per touched line).
+- **Per-hunk verbs** `[Insert] [Insert as draft] [Discard]` (floating pill; bulk `Insert all as draft` / `Discard all` in the toolbar). All hunks decided ⇒ the one pending `session/request_permission` is answered: ≥1 accepted ⇒ `accept_edit` if any draft-mode accept else `accept` (Level 0: the first `allow_once`); all discarded ⇒ `reject`. `allow_always` is filtered before rendering, always.
+- **Grant** `{toolCallId, path, expected = canonical(base section with the ACCEPTED hunks applied), accepted[], discarded[]}` — i.e. what the buffer now holds. On `fs/write_text_file`: `final` ⇒ `-32003`; grant found and `canonical(content) === expected` ⇒ `applied` (the agent wrote exactly what landed; ack with `_meta.rad.outcome:"applied"`); grant found but content differs (partial acceptance, or the agent wrote something other than it showed) ⇒ **`partial`** — the buffer keeps the radiologist's per-hunk result and the ack carries `_meta.rad{outcome:"partial", accepted, discarded}` (KS decision: partial acceptance = accept on the wire + partial ack; the agent re-reads live state anyway). The agent's content never enters the buffer directly. No grant ⇒ **unsolicited** write (Level 0 / unasked `write_file`): synthesize hunks from current vs content, render the overlay, hold the request until decided, `-32010` if all discarded.
+- **Grant read-through.** While a grant is open for a path (between the permission answer and the agent's write, ≤ 60 s), `fs/read_text_file` on that path serves the proposal's **base text** — what the agent was shown — so its read-modify-write reproduces the proposed edit instead of failing to find `old_string` in the already-updated buffer (found in the first browser run of slice 3). The buffer already holds the radiologist's decision; the agent's write is only compared against it.
+- **Permission ↔ proposal correlation.** deepagents-acp mints a fresh id for the HITL interrupt, so the permission request's `toolCallId` ≠ the streamed `tool_call`'s. The editor matches by the request's `rawInput` (`file_path` + `old_string`/`new_string`) against pending proposals and mirrors the decision on the tool card it belongs to. deepagents-acp also never sends a completion update for `edit_file`; a resolved permission ends the card's story.
+- **Level 0 hygiene** (spike 1b): after `session/new`, if `modes` is advertised → `session/set_mode {modeId:"default"}`; ignore Level 0 `available_commands_update`.
+- Known limitation v0.1: the model learns of a *partial* accept only by re-reading (deepagents' `EditResult` cannot carry `_meta`); the system prompt says so. A `_rad/`-level notification is the v0.2 fix.
+- Fallback if the overlay proves too costly: option A, with nothing else changing.
 
 ### 5.8 Fix in the proposal doc
 - Companion line says "Flutter Quill client" → QuillJS (web). Flutter would forfeit the browser-safe TS SDK.
@@ -265,7 +276,7 @@ Mechanics: a proposal = one or more *hunks* `{toolCallId, section, oldText, newT
 | Provider | `RAD_MODEL` | Notes |
 |---|---|---|
 | Ollama (default, offline demo) | `openai:gpt-oss:20b` + `RAD_MODEL_BASE_URL=http://localhost:11434/v1` | OpenAI-compatible shape; also `qwen3.5`. Pin base URL in config, not `OLLAMA_HOST`. |
-| OpenAI | `openai:gpt-5` | via `OPENAI_API_KEY` |
+| OpenAI | `openai:gpt-5.6-terra` | via `OPENAI_API_KEY` |
 | Anthropic | `anthropic:claude-sonnet-5` | LangChain provider string; not OpenAI-shaped but same code path |
 
 **Decided (KS, 2026-08-29):** demo on hosted `gpt-5` / `claude-sonnet-5`; show the Ollama switch as the on-prem story. Synthetic data makes either safe.

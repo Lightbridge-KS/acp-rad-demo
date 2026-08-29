@@ -1,6 +1,7 @@
 """Model selection from the environment.
 
-RAD_MODEL           LangChain provider string, e.g. ``openai:gpt-5``, ``anthropic:claude-sonnet-5``.
+RAD_MODEL           LangChain provider string, e.g. ``openai:gpt-5.6-terra`` or
+                    ``anthropic:claude-sonnet-5``.
 RAD_MODEL_BASE_URL  If set, the model name after the ``provider:`` prefix is served through
                     ``ChatOpenAI(base_url=…)`` — any OpenAI-compatible endpoint (Ollama, gateways).
 OPENAI_API_KEY      Used with a base URL; falls back to ``"ollama"`` (Ollama ignores it).
@@ -14,7 +15,7 @@ import os
 
 from langchain_core.language_models import BaseChatModel
 
-DEFAULT_MODEL = "openai:gpt-5"
+DEFAULT_MODEL = "openai:gpt-5.6-terra"
 
 
 def model_spec() -> str:

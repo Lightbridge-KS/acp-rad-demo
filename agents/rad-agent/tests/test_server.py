@@ -1,4 +1,4 @@
-"""RadAgentServer profile behaviour, exercised by direct method calls (no wire)."""
+"""RadReportAgentServer profile behaviour, exercised by direct method calls (no wire)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from acp.exceptions import RequestError
 from acp.schema import Implementation
 
 from rad_agent.backend import AcpClientBackend
-from rad_agent.server import AGENT_RAD_CAPS, RadAgentServer, rad_meta
+from rad_agent.server import AGENT_RAD_CAPS, RadReportAgentServer, rad_meta
 
 
-def _server() -> RadAgentServer:
-    return RadAgentServer()
+def _server() -> RadReportAgentServer:
+    return RadReportAgentServer()
 
 
 async def test_initialize_advertises_rad_caps_and_agent_info() -> None:
@@ -23,7 +23,7 @@ async def test_initialize_advertises_rad_caps_and_agent_info() -> None:
         rad={"profileVersion": "0.1", "focusState": True},
     )
     assert response.protocol_version == 1
-    assert response.agent_info is not None and response.agent_info.name == "rad-agent"
+    assert response.agent_info is not None and response.agent_info.name == "rad-report-agent"
     assert response.field_meta is not None
     rad = response.field_meta["rad"]
     assert {k: rad[k] for k in AGENT_RAD_CAPS} == AGENT_RAD_CAPS
@@ -77,6 +77,16 @@ async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
     assert backend.session_id == created.session_id
     assert backend.manifest == sorted(manifest)
     assert captured["accession"] == "ACC1"
+
+
+def test_on_connect_wraps_the_connection_with_clinical_verbs() -> None:
+    from rad_agent.permissions import PermissionRewritingClient
+
+    server = _server()
+    inner = object()
+    server.on_connect(inner)
+    assert isinstance(server._conn, PermissionRewritingClient)
+    assert server._conn._inner is inner
 
 
 async def test_ext_method_is_not_found() -> None:

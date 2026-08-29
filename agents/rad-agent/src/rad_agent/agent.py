@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from deepagents import create_deep_agent
+from deepagents import FilesystemPermission, create_deep_agent
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from deepagents_acp.server import AgentSessionContext
@@ -15,17 +15,23 @@ from rad_agent.config import resolve_model
 
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "system.md").read_text(encoding="utf-8")
 
-#: Read-only tool set for this slice; ``write_file``/``edit_file`` join in slice 3.
-READ_TOOLS = ["ls", "read_file", "glob", "grep"]
+#: File tools exposed to the model. Writes are proposals: HITL interrupts them so the editor
+#: shows the diff and asks the radiologist before anything runs.
+FS_TOOLS = ["ls", "read_file", "glob", "grep", "edit_file", "write_file"]
+WRITE_TOOLS = ["edit_file", "write_file"]
+
+#: Read-only zones (defense in depth; the editor refuses these writes too).
+READ_ONLY_PATHS = ["/priors/**", "/templates/**", "/snippets/**"]
 
 
 def build_agent(
     context: AgentSessionContext, *, backend: BackendProtocol, accession: str | None
 ) -> CompiledStateGraph:
-    """Factory called by ``RadAgentServer`` at the first prompt of a session.
+    """Factory called by ``RadReportAgentServer`` at the first prompt of a session.
 
     The backend is bound to that session's ACP connection, so every file tool the model
-    calls is served by the editor (``fs/read_text_file``) rather than a real filesystem.
+    calls is served by the editor (``fs/read_text_file`` / ``fs/write_text_file``) rather
+    than a real filesystem.
     """
     files_note = (
         "\n\n## Files\n"
@@ -33,7 +39,13 @@ def build_agent(
         "The report is `report.md`; each section is also a file under `sections/` "
         "(history, technique, comparison, findings, impression). Read the section you need "
         "before answering — never guess its content. `/priors/`, `/templates/` and `/snippets/` "
-        "are read-only reference material. Use `ls` on `/` to see everything available."
+        "are read-only reference material. Use `ls` on `/` to see everything available.\n\n"
+        "## Editing\n"
+        "Propose edits with `edit_file` on the section file (`sections/impression.md`, …), "
+        "one section per call, using the exact current line(s) as `old_string`. Prefer "
+        "`edit_file` over `write_file`. The radiologist reviews every proposal as tracked "
+        "changes and may accept only part of it — re-read the section before building on an "
+        "edit, and never claim an edit is in the report until you have read it back."
     )
     return create_deep_agent(
         model=resolve_model(),
@@ -42,9 +54,13 @@ def build_agent(
         middleware=[
             FilesystemMiddleware(
                 backend=backend,
-                tools=READ_TOOLS,  # type: ignore[arg-type]
+                tools=FS_TOOLS,  # type: ignore[arg-type]
                 tool_token_limit_before_evict=None,  # never spill to /large_tool_results
             )
+        ],
+        interrupt_on={tool: {"allowed_decisions": ["approve", "reject"]} for tool in WRITE_TOOLS},
+        permissions=[
+            FilesystemPermission(operations=["write"], paths=READ_ONLY_PATHS, mode="deny")
         ],
         checkpointer=MemorySaver(),
     )

@@ -3,7 +3,9 @@
 The editor (ACP Client) owns the report; this backend never touches a real filesystem.
 ``read_file`` → ``fs/read_text_file``. ACP v1 has no listing call, so ``ls``/``glob`` answer
 from the manifest the client sent in ``session/new._meta.rad.manifest`` and ``grep`` reads each
-candidate through the client. Writes are refused here until the proposal flow lands (slice 3).
+candidate through the client. ``write_file``/``edit_file`` → ``fs/write_text_file``; the editor
+has already shown the diff and asked the radiologist (HITL → ``session/request_permission``)
+before these run, and it decides what actually lands (INV-1).
 
 Only the async methods are overridden: ``BackendProtocol`` has no abstract methods and the
 filesystem middleware calls ``a*`` variants. Backends return raw text; the middleware adds line
@@ -33,8 +35,6 @@ from wcmatch import glob as wcglob
 
 log = logging.getLogger(__name__)
 
-WRITE_REFUSED = "writes are proposals; not available yet"
-
 
 class _ReadResponse(Protocol):
     content: str
@@ -46,6 +46,8 @@ class _FsClient(Protocol):
     async def read_text_file(
         self, session_id: str, path: str, line: int | None = None, limit: int | None = None
     ) -> _ReadResponse: ...
+
+    async def write_text_file(self, session_id: str, path: str, content: str) -> Any: ...
 
 
 class AcpClientBackend(BackendProtocol):
@@ -123,17 +125,40 @@ class AcpClientBackend(BackendProtocol):
                 break
         return GrepResult(matches=matches, truncated=truncated)
 
-    # -- writes (refused in this slice) --------------------------------------
+    # -- writes: proposals through the client's fs/write_text_file ---------------
+    # The editor gates every write (INV-1); here we only do read-modify-write and
+    # report the client's `_meta.rad.outcome` (applied / partial) to the log.
 
     async def awrite(self, file_path: str, content: str) -> WriteResult:
-        del content
-        return WriteResult(error=WRITE_REFUSED, path=file_path)
+        err = await self._put(file_path, content)
+        return WriteResult(error=err, path=file_path)
 
     async def aedit(
         self, file_path: str, old_string: str, new_string: str, replace_all: bool = False
     ) -> EditResult:
-        del old_string, new_string, replace_all
-        return EditResult(error=WRITE_REFUSED, path=file_path)
+        current = await self._fetch(file_path)
+        if current is None:
+            return EditResult(error=self._last_error, path=file_path)
+        occurrences = current.count(old_string) if old_string else 0
+        if occurrences == 0:
+            return EditResult(error=f"old_string not found in '{file_path}'", path=file_path)
+        if occurrences > 1 and not replace_all:
+            return EditResult(
+                error=(
+                    f"old_string occurs {occurrences} times in '{file_path}'; "
+                    "include more context or set replace_all=true"
+                ),
+                path=file_path,
+            )
+        updated = (
+            current.replace(old_string, new_string)
+            if replace_all
+            else current.replace(old_string, new_string, 1)
+        )
+        err = await self._put(file_path, updated)
+        if err:
+            return EditResult(error=err, path=file_path)
+        return EditResult(path=file_path, occurrences=occurrences if replace_all else 1)
 
     # -- internals -------------------------------------------------------------
 
@@ -155,6 +180,25 @@ class AcpClientBackend(BackendProtocol):
             return None
         return resp.content
 
+    async def _put(self, path: str, content: str) -> str | None:
+        """Whole-file write through the client; returns an error message or ``None``."""
+        try:
+            resp = await self._conn.write_text_file(
+                session_id=self.session_id, path=path, content=content
+            )
+        except RequestError as exc:
+            return str(exc) or f"write refused ({exc.code})"
+        except ConnectionError as exc:
+            return f"connection lost: {exc}"
+        except Exception as exc:  # noqa: BLE001 — never raise across the tool boundary
+            log.exception("fs/write_text_file failed for %s", path)
+            return f"{type(exc).__name__}: {exc}"
+        meta = getattr(resp, "field_meta", None) or {}
+        rad = meta.get("rad") if isinstance(meta, dict) else None
+        if rad:
+            log.info("write %s → outcome=%s", path, rad)
+        return None
+
 
 def _dir_prefix(path: str) -> str:
     """Normalize a directory path to a prefix ending in '/'; '' and '/' both mean the root."""
@@ -164,5 +208,4 @@ def _dir_prefix(path: str) -> str:
     return p if p.endswith("/") else f"{p}/"
 
 
-__all__: list[str] = ["AcpClientBackend", "WRITE_REFUSED"]
-_ = Any  # keep typing import used for future signature widening
+__all__: list[str] = ["AcpClientBackend"]

@@ -38,8 +38,11 @@ export type ReportStore = {
   accession: string;
   /** Canonical content at `path`; throws `RadError` (-32004 / -32003). */
   read: (path: string) => string;
-  /** Rejects every write in this slice; the proposal flow arrives with slice 3. */
-  write: (path: string, content: string) => never;
+  /**
+   * Validate a write target: throws `-32004` outside the namespace and `-32003` on read-only
+   * paths. Applying the content is the editor's decision (proposal flow, design §5.7).
+   */
+  assertWritable: (path: string) => void;
   /** The whole live report as canonical Markdown. */
   reportMarkdown: () => string;
   /** Every readable path, for `session/new._meta.rad.manifest`. */
@@ -82,11 +85,10 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
     }
   };
 
-  const write = (path: string): never => {
+  const assertWritable = (path: string): void => {
     const r = resolvePath(path, deps.accession);
     if (!r) throw notFound(path);
     if (!isWritable(r)) throw new RadError(RAD_ERRORS.FORBIDDEN, `read-only: ${path}`);
-    throw new RadError(RAD_ERRORS.FORBIDDEN, "writes are proposals; not available yet");
   };
 
   const manifest = () =>
@@ -97,7 +99,7 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
       snippets: Object.keys(snippets),
     });
 
-  return { accession: deps.accession, read, write, reportMarkdown, manifest };
+  return { accession: deps.accession, read, assertWritable, reportMarkdown, manifest };
 
   function throwNotFound(path: string): never {
     throw notFound(path);

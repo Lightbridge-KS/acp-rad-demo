@@ -1,4 +1,4 @@
-"""``RadAgentServer`` — deepagents-acp's ``AgentServerACP`` plus the ACP-Rad profile.
+"""``RadReportAgentServer`` — deepagents-acp's ``AgentServerACP`` plus the ACP-Rad profile.
 
 Profile additions ride in ``_meta.rad`` (ACP v1 has no other extension slot):
 
@@ -26,6 +26,7 @@ from rad_agent import AGENT_NAME, PROFILE_VERSION
 from rad_agent.agent import build_agent
 from rad_agent.backend import AcpClientBackend
 from rad_agent.config import model_spec
+from rad_agent.permissions import PermissionRewritingClient
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def rad_meta(kwargs: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-class RadAgentServer(AgentServerACP):
+class RadReportAgentServer(AgentServerACP):
     """AgentServerACP speaking the ACP-Rad profile.
 
     The agent graph is built per session (deepagents-acp calls the factory lazily at the
@@ -71,6 +72,10 @@ class RadAgentServer(AgentServerACP):
         self.session_rad: dict[str, dict[str, Any]] = {}
         self.client_rad_caps: dict[str, Any] | None = None
         self._current_session_id: str | None = None
+
+    def on_connect(self, conn: Any) -> None:
+        """Wrap the connection so permission requests carry the clinical verbs."""
+        super().on_connect(PermissionRewritingClient(conn))
 
     # deepagents-acp's AgentSessionContext carries no session id; capture it here.
     def _reset_agent(self, session_id: str) -> None:
