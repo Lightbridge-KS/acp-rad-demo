@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Quill: make the editor fill its pane and read like a report. */
+.report-editor .ql-container {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.report-editor .ql-editor {
+  min-height: 100%;
+  padding: 1.25rem 1.5rem;
+}

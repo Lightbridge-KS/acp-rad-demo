@@ -1,0 +1,23 @@
+{
+  "name": "bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebSocket ⇄ stdio launcher for ACP agents (dumb pipe: frames ⇄ NDJSON lines)",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "smoke": "node scripts/smoke.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3",
+    "zod": "^4.5.2"
+  }
+}

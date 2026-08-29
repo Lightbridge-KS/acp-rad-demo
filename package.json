@@ -1,0 +1,11 @@
+{
+  "name": "acp-rad-poc",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.2",
+  "scripts": {
+    "dev": "pnpm --parallel --recursive --filter './apps/*' dev",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm --recursive test"
+  }
+}

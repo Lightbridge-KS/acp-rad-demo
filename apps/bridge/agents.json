@@ -1,0 +1,14 @@
+{
+  "rad": {
+    "cmd": "uv",
+    "args": ["run", "--project", "../../agents/rad-agent", "rad-agent"]
+  },
+  "claude": {
+    "cmd": "npx",
+    "args": ["-y", "@agentclientprotocol/claude-agent-acp"]
+  },
+  "gemini": {
+    "cmd": "gemini",
+    "args": ["--experimental-acp"]
+  }
+}
