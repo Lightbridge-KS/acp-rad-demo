@@ -60,6 +60,32 @@ One screen: report editor left, agent sidebar right, a 3-case synthetic worklist
 └──────────────────────────────────┴─────────────────────────────────────┘
 ```
 
+### 1.1 The real-life flow (KS, 2026-08-29) — what the machinery must serve
+
+```
+1 open editor ─► session/new(accession, manifest)
+2 draft ┬ Human-driven  "/write-ct-brain Left MCA infarct; lacunar right caudate" ─► agent skill ─► whole-report proposal
+        └ AI-driven     vision models (CNNs / MedGemma) ─► findings ─► /worklist/{acc}/cad/findings.md (RO) ─► agent reads ─► proposal
+3 tweak ┬ chat ─► section proposals rendered inline as tracked changes     ◄─ INV-2: never interferes
+        └ type ─► the buffer, live, always                                  ◄─┘
+4 impression ┬ "/impression" ─► proposal
+             └ typed by hand
+5 save draft ─► preliminary ─► reviewed ─► final (write-lock)
+```
+
+Consequences, settled:
+
+- **Vision results are a file, not a modality.** Upstream models write `/worklist/{acc}/cad/findings.md` (read-only, in the manifest, with a provenance header: model, version, timestamp). The RadAgent never sees pixels; the pipeline is pluggable; a Level 0 agent can read it; the audit shows what a draft was based on. ACP is untouched.
+- **Two command namespaces.** *Editor commands* are deterministic and never touch the agent: `/template <id>`, `/snippet <id>`, `/short-prelim-<region>`, `/finalize` — they apply instantly, still as an accept-able insert (INV-1), and work with any agent. *Agent commands* are skills advertised via `available_commands_update`: `/write-ct-brain`, `/impression`, `/qa`, `/compare`. One palette shows both, visually distinct (⚡ instant vs ✨ AI). Profile wording: *Clients MAY offer deterministic commands; Agents advertise theirs.*
+- **Skills are the agent's authoring surface.** deepagents' `skills=` loads KS's `skills-radreport` (`write-ct-brain`, `write-us-abdomen`, …) unchanged: free-text findings in, canonical Markdown out, silent defaults, `___` for missing numbers. A whole-report skill output becomes a *multi-hunk* proposal (one hunk per changed section). Skills land after the flow machinery (slice 4+).
+- **Persistence** for step 5 is a slice-6 item: `save draft` persists the canonical Markdown through the bridge (same sink family as audit).
+
+### 1.2 Invariants
+
+> **INV-1 (Sign-off).** No byte enters the report buffer except through an explicit accept by the radiologist. (Proposal §7.1.)
+>
+> **INV-2 (Non-interference).** The radiologist's typing never blocks and is never overwritten. A pending proposal is an *overlay* anchored by `(section, old_string)`, never by character offsets; overlay positions transform with the user's edits; at accept time the editor re-locates `old_string` in the live buffer, and if the user's edits made it unfindable the proposal conflicts (`-32011`) — the agent, which reads live state anyway, re-reads and re-proposes. This is why grant matching is "path + expected content", not offsets.
+
 Scripted scenarios, in order of demo value:
 
 0. **Instantiate template** — open a blank ER CT brain study → `/template` → agent reads `meta.json` (modality, protocol, sex, dose) and `/templates/ct-brain-er.md`, proposes the filled skeleton (drops `[female]`-only lines for a male patient, fills technique/dose, leaves clinical `___` blanks) → one accept → report scaffolded in seconds. *This is the "why would I use this" moment for an ER shift.*
@@ -219,7 +245,13 @@ The real templates (`_temp/reports/`) use `**LABEL:** text` lines, a blank line 
 ### 5.6 Report lifecycle from the snippets
 `reportStatus` should mirror the real ER lifecycle rather than `draft|preliminary|final`: `short_prelim | preliminary | preliminary_reviewed | final`. Status markers are *text snippets* in the report body (ER Reviewed / Not Reviewed); the Client owns the transition and the `final` write-lock. PoC: statuses are display-only except `final` (locks writes).
 
-### 5.7 Fix in the proposal doc
+### 5.7 Interaction model B: inline tracked changes — Decided (KS, 2026-08-29)
+
+Three options were weighed: **A** sidebar-centric review (diff card in the sidebar, editor updates on accept), **B** inline tracked changes (proposal rendered *in the report* as `~~deleted~~` / `++inserted++` hunks with per-hunk accept/reject), **C** action-first proposal queue (no chat by default). Decided: **B for the judgment surface, C's action bar for the named moves, A's sidebar as transcript + tool cards + QA alerts + audit.** The sidebar mirrors decisions; it never owns them.
+
+Mechanics: a proposal = one or more *hunks* `{toolCallId, section, oldText, newText}` from `tool_call_update.content[type=diff]`. The editor renders hunks as overlays (two custom inline blots, `ai-delete` and `ai-insert`, plus a hunk model) — the pending text is **rendered but not in the buffer** (INV-1) — with a floating `[Insert] [Insert as draft] [Discard]` control per hunk. Accept re-anchors by `old_string` (INV-2), applies the change, and resolves the pending `session/request_permission` (`accept`/`accept_edit`/`reject`). Fallback if the overlay proves too costly in slice 3: option A, with nothing else changing.
+
+### 5.8 Fix in the proposal doc
 - Companion line says "Flutter Quill client" → QuillJS (web). Flutter would forfeit the browser-safe TS SDK.
 - "versioned in `ramaai-dev` org" → private `radrama-ai`.
 - `-32010` returned to `fs/write_text_file` on rejection: keep, but note it is the *fallback* path (§3.1).
