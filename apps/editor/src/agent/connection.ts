@@ -102,7 +102,7 @@ export async function connectAgent(
     })
     .onRequest(acp.methods.client.fs.writeTextFile, async (ctx) => {
       const { path, content } = ctx.params;
-      if (session.reportStatus === "final") {
+      if (store.reportStatus() === "final") {
         audit.record("fs.write.refused", { path, outcome: "final" });
         throw new acp.RequestError(RAD_ERRORS.FORBIDDEN, "report is final");
       }

@@ -136,3 +136,15 @@ describe("sliceLines (ACP line/limit windowing)", () => {
     expect(sliceLines(c, line, limit)).toBe(expected);
   });
 });
+
+describe("report status lock", () => {
+  it("refuses every write once the report is final, reads still work", () => {
+    let status: "draft" | "final" = "draft";
+    const store = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n\n**IMPRESSION:**\n- ...\n"), meta: {}, reportStatus: () => status });
+    expect(() => store.assertWritable("/worklist/ACC1/sections/impression.md")).not.toThrow();
+    status = "final";
+    expect(store.reportStatus()).toBe("final");
+    expect(() => store.assertWritable("/worklist/ACC1/sections/impression.md")).toThrow(/final/);
+    expect(store.read("/worklist/ACC1/sections/impression.md")).toContain("- ...");
+  });
+});

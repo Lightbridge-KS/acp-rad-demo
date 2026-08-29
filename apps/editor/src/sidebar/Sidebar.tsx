@@ -2,18 +2,25 @@
  * Agent sidebar on assistant-ui (ADR 0001, partial adoption): external-store runtime +
  * unstyled primitives, styled with Tailwind. It MIRRORS decisions — the permission is
  * decided in the report — so no `onRespondToToolApproval` is supplied (load-bearing).
+ *
+ * The composer's `/` opens the same command registry as the editor (assistant-ui's trigger
+ * popover, unstable API, pinned 0.15.17): editor commands run through `onCommand`, skills are
+ * sent as `/name`; a skill with an argument hint is only typed into the composer.
  */
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  unstable_useSlashCommandAdapter,
+  useAui,
   useExternalStoreRuntime,
   type AppendMessage,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import type { AuditRecord, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
+import { GROUP_LABEL, flattenCommands, type Command, type CommandGroups } from "../commands/registry.ts";
 import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
 
@@ -36,6 +43,10 @@ type Props = {
   header: HeaderState;
   agent: AgentPort | null;
   audit: AuditRecord[];
+  /** The command registry for the composer's `/` menu. */
+  commands?: () => CommandGroups;
+  /** Run a command picked in the composer (editor commands and argument-less skills). */
+  onCommand?: (command: Command) => void;
 };
 
 const STATUS_DOT: Record<HeaderState["status"], string> = {
@@ -45,7 +56,9 @@ const STATUS_DOT: Record<HeaderState["status"], string> = {
   error: "bg-red-500",
 };
 
-export function Sidebar({ state, dispatch, header, agent, audit }: Props) {
+const EMPTY_GROUPS: CommandGroups = { suggested: [], editor: [], skills: [] };
+
+export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand }: Props) {
   const runtime = useExternalStoreRuntime<AcpMessage>({
     messages: state.messages,
     isRunning: state.isRunning,
@@ -59,10 +72,12 @@ export function Sidebar({ state, dispatch, header, agent, audit }: Props) {
     onCancel: async () => {
       await agent?.cancel();
     },
-    // Deliberately NO onRespondToToolApproval: the Quill tracked change owns accept/discard.
+    // Deliberately NO onRespondToToolApproval: the Quill tracked change owns accept/reject.
   });
   const [tab, setTab] = useState<"chat" | "audit">("chat");
   const canSend = header.status === "ready" && agent !== null;
+  const last = state.messages[state.messages.length - 1];
+  const stopped = last?.role === "assistant" && last.stopReason === "cancelled";
 
   return (
     <aside className="flex h-full flex-col border-l border-gray-200 bg-gray-50">
@@ -93,32 +108,94 @@ export function Sidebar({ state, dispatch, header, agent, audit }: Props) {
           <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
             <ThreadPrimitive.Viewport className="flex-1 space-y-2 overflow-y-auto px-3 py-3 text-sm">
               <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+              {stopped && (
+                <p data-testid="stopped" className="text-xs text-gray-500 italic">
+                  stopped
+                </p>
+              )}
               {header.error && <p className="text-red-600">{header.error}</p>}
             </ThreadPrimitive.Viewport>
-            <ComposerPrimitive.Root className="border-t border-gray-200 p-2">
-              <ComposerPrimitive.Input
-                className="h-20 w-full resize-none rounded border border-gray-300 p-2 text-sm"
-                placeholder="Ask the agent… (Enter to send, Shift+Enter for newline)"
-                disabled={!canSend}
-              />
-              <div className="mt-1 flex justify-end gap-2">
-                <ThreadPrimitive.If running>
-                  <ComposerPrimitive.Cancel className="rounded bg-red-600 px-3 py-1 text-sm text-white">Stop</ComposerPrimitive.Cancel>
-                </ThreadPrimitive.If>
-                <ThreadPrimitive.If running={false}>
-                  <ComposerPrimitive.Send
-                    disabled={!canSend}
-                    className="rounded bg-sky-600 px-3 py-1 text-sm text-white disabled:opacity-40"
-                  >
-                    Send
-                  </ComposerPrimitive.Send>
-                </ThreadPrimitive.If>
-              </div>
-            </ComposerPrimitive.Root>
+            <Composer canSend={canSend} commands={commands} onCommand={onCommand} />
           </ThreadPrimitive.Root>
         </AssistantRuntimeProvider>
       )}
     </aside>
+  );
+}
+
+function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
+  const aui = useAui();
+  const groups = commands?.() ?? EMPTY_GROUPS;
+  const flat = flattenCommands(groups);
+  const groupOf = useMemo(() => {
+    const m = new Map<string, keyof CommandGroups>();
+    for (const g of ["skills", "editor", "suggested"] as const) for (const c of groups[g]) m.set(c.id, g);
+    return m;
+  }, [groups]);
+  const slash = unstable_useSlashCommandAdapter({
+    removeOnExecute: true,
+    commands: flat.map((c) => ({
+      id: c.id,
+      label: `/${c.id}`,
+      description: c.description,
+      execute: () => {
+        // A skill with an argument is only typed in; the radiologist completes and sends it.
+        if (c.kind === "skill" && c.hint) aui.composer.setText(`/${c.id} `);
+        else onCommand?.(c);
+      },
+    })),
+  });
+  return (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      <ComposerPrimitive.Root className="relative border-t border-gray-200 p-2">
+        <ComposerPrimitive.Unstable_TriggerPopover
+          char="/"
+          adapter={slash.adapter}
+          data-testid="composer-slash"
+          className="absolute right-2 bottom-full left-2 z-30 mb-1 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
+        >
+          <ComposerPrimitive.Unstable_TriggerPopover.Action {...slash.action} />
+          <ComposerPrimitive.Unstable_TriggerPopoverItems>
+            {(items) => {
+              let lastGroup: string | undefined;
+              return items.map((item, index) => {
+                const g = groupOf.get(item.id);
+                const header = g && g !== lastGroup ? GROUP_LABEL[g] : null;
+                lastGroup = g ?? lastGroup;
+                return (
+                  <div key={item.id}>
+                    {header && <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{header}</div>}
+                    <ComposerPrimitive.Unstable_TriggerPopoverItem
+                      item={item}
+                      index={index}
+                      className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-gray-50 data-[highlighted]:bg-sky-50"
+                    >
+                      <span className="font-mono text-xs">{item.label}</span>
+                      <span className="ml-auto truncate text-xs text-gray-500">{item.description}</span>
+                    </ComposerPrimitive.Unstable_TriggerPopoverItem>
+                  </div>
+                );
+              });
+            }}
+          </ComposerPrimitive.Unstable_TriggerPopoverItems>
+        </ComposerPrimitive.Unstable_TriggerPopover>
+        <ComposerPrimitive.Input
+          className="h-20 w-full resize-none rounded border border-gray-300 p-2 text-sm"
+          placeholder="Ask the agent… (/ opens the commands · Enter to send, Shift+Enter for newline)"
+          disabled={!canSend}
+        />
+        <div className="mt-1 flex justify-end gap-2">
+          <ThreadPrimitive.If running>
+            <ComposerPrimitive.Cancel className="rounded bg-red-600 px-3 py-1 text-sm text-white">Stop</ComposerPrimitive.Cancel>
+          </ThreadPrimitive.If>
+          <ThreadPrimitive.If running={false}>
+            <ComposerPrimitive.Send disabled={!canSend} className="rounded bg-sky-600 px-3 py-1 text-sm text-white disabled:opacity-40">
+              Send
+            </ComposerPrimitive.Send>
+          </ThreadPrimitive.If>
+        </div>
+      </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 }
 

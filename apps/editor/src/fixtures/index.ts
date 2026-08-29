@@ -3,6 +3,7 @@
  * All Markdown is stored in canonical form (see packages/acp-rad markdown.ts).
  */
 import { zRadSessionMeta, type RadSessionMeta } from "acp-rad";
+import { zCaseMeta, type CaseMeta } from "../commands/meta.ts";
 
 const md = import.meta.glob("../../fixtures/**/*.md", {
   query: "?raw",
@@ -37,8 +38,8 @@ export type CaseFixture = {
   id: string;
   title: string;
   session: RadSessionMeta;
-  /** Served as /worklist/{acc}/meta.json — de-identified. */
-  meta: Record<string, unknown>;
+  /** Served as /worklist/{acc}/meta.json — de-identified; typed for the editor commands. */
+  meta: CaseMeta;
   reportMarkdown: string;
   /** Prior reports by accession (canonical Markdown). */
   priors: Record<string, string>;
@@ -72,7 +73,7 @@ export const cases: CaseFixture[] = Object.entries(metas)
       id,
       title: meta.title,
       session: zRadSessionMeta.parse(meta.session),
-      meta: rest as Record<string, unknown>,
+      meta: zCaseMeta.parse(rest),
       reportMarkdown: applyStartState(md[`${base}report.md`] ?? "\n", demo?.start),
       priors,
     };

@@ -25,6 +25,9 @@ export type ToolCall = {
   permission?: Permission;
 };
 
+/** A skill the agent advertised (`available_commands_update`), as the menus need it. */
+export type SkillCommand = { name: string; description: string; hint?: string };
+
 export type Part =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
@@ -38,7 +41,7 @@ export type SidebarState = {
   messages: AcpMessage[];
   isRunning: boolean;
   plan: { content: string; status: string }[];
-  commands: string[];
+  commands: SkillCommand[];
   unknown: string[];
 };
 
@@ -108,7 +111,10 @@ function applyUpdate(state: SidebarState, u: acp.SessionUpdate): SidebarState {
     case "plan":
       return { ...state, plan: u.entries.map((e) => ({ content: e.content, status: e.status })) };
     case "available_commands_update":
-      return { ...state, commands: u.availableCommands.map((c) => c.name) };
+      return {
+        ...state,
+        commands: u.availableCommands.map((c) => ({ name: c.name, description: c.description, ...(c.input?.hint ? { hint: c.input.hint } : {}) })),
+      };
     default:
       return { ...state, unknown: [...state.unknown, (u as { sessionUpdate: string }).sessionUpdate] };
   }

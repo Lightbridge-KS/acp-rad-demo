@@ -1,10 +1,15 @@
 /**
- * ProposalStore — the editor's side of sign-off (design §5.7).
+ * ProposalStore — the editor's side of the human gate (design 02 §5.1).
  *
  * One proposal per agent tool call. Hunks are decided in the report; when all are decided the
  * pending `session/request_permission` is answered, and a grant records what the agent's
  * subsequent `fs/write_text_file` is allowed to be. Framework-free; React subscribes via
  * `subscribe`.
+ *
+ * A proposal's `origin` is `agent` (the normal case) or `local`: an editor command applied to a
+ * non-blank buffer as tracked changes (option C). Local proposals share the rendering and the
+ * per-hunk decisions but no agent is waiting — no permission answer, no grant, never cancelled
+ * by the agent's turn ending, and `accept_edit` is plain `accept` (house text is not AI text).
  */
 import { applyHunks, buildHunks, canonicalize, resolvePath, type Hunk, type SectionId } from "acp-rad";
 
@@ -14,8 +19,13 @@ export type HunkState = "pending" | "conflict" | Verb;
 export type PermissionOption = { optionId: string; name: string; kind: string };
 export type PermissionAnswer = { outcome: "selected"; optionId: string } | { outcome: "cancelled" };
 
+export type ProposalOrigin = "agent" | "local";
+
 export type Proposal = {
   toolCallId: string;
+  origin: ProposalOrigin;
+  /** Local proposals: the command that produced it and what accepting it means. */
+  local?: { command: string; folded?: boolean };
   path: string;
   section: SectionId | null;
   hunks: Hunk[];
@@ -90,7 +100,7 @@ export class ProposalStore {
    * match on the path and, when given, the exact old/new snippets.
    */
   matchPending(path: string, oldText?: string | null, newText?: string | null): Proposal | undefined {
-    const candidates = this.pending().filter((p) => p.path === path && !p.options);
+    const candidates = this.pending().filter((p) => p.origin === "agent" && p.path === path && !p.options);
     if (candidates.length === 0) return undefined;
     if (oldText == null && newText == null) return candidates[candidates.length - 1];
     const want = buildHunks(oldText ?? "", newText ?? "").map((h) => `${h.oldLines.join("\n")}→${h.newLines.join("\n")}`).join("|");
@@ -117,10 +127,22 @@ export class ProposalStore {
     return this.add(toolCallId, path, r.kind === "section" ? r.id : null, hunks, currentFile);
   }
 
+  /**
+   * From an editor command on a non-blank buffer (option C): the command's whole-buffer result
+   * as tracked changes the radiologist decides hunk by hunk. No agent is involved.
+   */
+  fromLocal(id: string, path: string, content: string, currentFile: string, local: NonNullable<Proposal["local"]>): Proposal | null {
+    const p = this.fromWrite(id, path, content, currentFile);
+    if (!p) return null;
+    p.origin = "local";
+    p.local = local;
+    return p;
+  }
+
   /** Attach the agent's permission request; resolves when every hunk is decided (or on cancel). */
   awaitPermission(toolCallId: string, options: PermissionOption[]): Promise<PermissionAnswer> {
     const p = this.proposals.get(toolCallId);
-    if (!p) return Promise.resolve({ outcome: "cancelled" });
+    if (!p || p.origin === "local") return Promise.resolve({ outcome: "cancelled" });
     p.options = options.filter((o) => o.kind !== "allow_always" && o.kind !== "reject_always"); // INV-1
     return new Promise((resolve) => {
       this.waiters.set(toolCallId, resolve);
@@ -139,6 +161,7 @@ export class ProposalStore {
   decide(toolCallId: string, hunkId: string, verb: Verb): Proposal | undefined {
     const p = this.proposals.get(toolCallId);
     if (!p || p.state !== "pending" || !(hunkId in p.states)) return p;
+    if (p.origin === "local" && verb === "accept_edit") verb = "accept"; // house text never lands unreviewed
     p.states[hunkId] = verb;
     this.emit({ type: "decided", proposal: p, hunkId, verb });
     if (this.allDecided(p)) this.answer(p);
@@ -161,8 +184,9 @@ export class ProposalStore {
     this.emit({ type: "cancelled", proposal: p });
   }
 
+  /** Agent proposals only: a local proposal belongs to the radiologist, not to the agent's turn. */
   cancelAll(): void {
-    for (const p of this.pending()) this.cancel(p.toolCallId);
+    for (const p of this.pending()) if (p.origin === "agent") this.cancel(p.toolCallId);
   }
 
   /** Grant lookup for an incoming write; single-use. */
@@ -199,6 +223,7 @@ export class ProposalStore {
   private add(toolCallId: string, path: string, section: SectionId | null, hunks: Hunk[], baseText: string): Proposal {
     const p: Proposal = {
       toolCallId,
+      origin: "agent",
       path,
       section,
       hunks,
@@ -223,6 +248,12 @@ export class ProposalStore {
 
   private answer(p: Proposal): void {
     if (p.state !== "pending") return;
+    if (p.origin === "local") {
+      // Nothing on the wire and no grant: the buffer already holds the radiologist's decisions.
+      p.state = "applied";
+      this.emit({ type: "write", proposal: p, outcome: "applied" });
+      return;
+    }
     p.state = "decided";
     const accepted = p.hunks.filter((h) => p.states[h.id] === "accept" || p.states[h.id] === "accept_edit").map((h) => h.id);
     const discarded = p.hunks.filter((h) => p.states[h.id] === "reject" || p.states[h.id] === "conflict").map((h) => h.id);

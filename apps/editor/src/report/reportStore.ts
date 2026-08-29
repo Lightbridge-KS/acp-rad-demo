@@ -1,13 +1,13 @@
+/**
+ * The editor's ReportStore: `acp-rad`'s store over live Quill ops, with the proposal overlay
+ * stripped (INV-1 — the agent never reads a pending proposal) and the live report status.
+ */
 import type Quill from "quill";
-import { createReportStore, type ReportStore } from "acp-rad";
+import { createReportStore, type ReportStatus, type ReportStore } from "acp-rad";
 import { snippets, templates, type CaseFixture } from "../fixtures/index.ts";
 import { stripOverlays } from "./overlay.ts";
 
-/**
- * The ReportStore over a live Quill instance — every read canonicalizes current editor state
- * **with pending overlays stripped** (INV-1: a proposal is rendered, never in the buffer).
- */
-export function makeReportStore(quill: Quill, fixture: CaseFixture): ReportStore {
+export function makeReportStore(quill: Quill, fixture: CaseFixture, reportStatus: () => ReportStatus): ReportStore {
   return createReportStore({
     accession: fixture.session.accession,
     getOps: () => stripOverlays(quill.getContents().ops),
@@ -15,5 +15,6 @@ export function makeReportStore(quill: Quill, fixture: CaseFixture): ReportStore
     priors: fixture.priors,
     templates,
     snippets,
+    reportStatus,
   });
 }

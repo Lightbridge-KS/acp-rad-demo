@@ -8,7 +8,7 @@
 import type { Op } from "quill-delta";
 import { deltaToMarkdown } from "./markdown.ts";
 import { buildManifest, isWritable, resolvePath } from "./namespace.ts";
-import { RAD_ERRORS, type RadErrorCode, type SectionId } from "./schema.ts";
+import { RAD_ERRORS, type RadErrorCode, type ReportStatus, type SectionId } from "./schema.ts";
 import { splitSections } from "./sections.ts";
 
 export class RadError extends Error {
@@ -32,6 +32,8 @@ export type ReportStoreDeps = {
   templates?: Record<string, string>;
   /** Quick-text snippets by id, canonical Markdown. */
   snippets?: Record<string, string>;
+  /** Live report status; `final` locks every write (design 02 §5.2). Absent ⇒ never locked. */
+  reportStatus?: () => ReportStatus;
 };
 
 export type ReportStore = {
@@ -47,6 +49,8 @@ export type ReportStore = {
   reportMarkdown: () => string;
   /** Every readable path, for `session/new._meta.rad.manifest`. */
   manifest: () => string[];
+  /** Live report status (see `ReportStoreDeps.reportStatus`). */
+  reportStatus: () => ReportStatus;
 };
 
 export function createReportStore(deps: ReportStoreDeps): ReportStore {
@@ -85,10 +89,13 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
     }
   };
 
+  const reportStatus = (): ReportStatus => deps.reportStatus?.() ?? "draft";
+
   const assertWritable = (path: string): void => {
     const r = resolvePath(path, deps.accession);
     if (!r) throw notFound(path);
     if (!isWritable(r)) throw new RadError(RAD_ERRORS.FORBIDDEN, `read-only: ${path}`);
+    if (reportStatus() === "final") throw new RadError(RAD_ERRORS.FORBIDDEN, "report is final");
   };
 
   const manifest = () =>
@@ -99,7 +106,7 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
       snippets: Object.keys(snippets),
     });
 
-  return { accession: deps.accession, read, assertWritable, reportMarkdown, manifest };
+  return { accession: deps.accession, read, assertWritable, reportMarkdown, manifest, reportStatus };
 
   function throwNotFound(path: string): never {
     throw notFound(path);

@@ -7,12 +7,13 @@ import type * as acp from "@assistant-ui/react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useReducer } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { Command, CommandGroups } from "../commands/registry.ts";
 import { Sidebar, type AgentPort } from "./Sidebar.tsx";
 import { initialSidebarState, sidebarReducer, type SidebarAction } from "./store.ts";
 
 let dispatchRef: ((a: SidebarAction) => void) | null = null;
 
-function Harness({ agent }: { agent: AgentPort }) {
+function Harness({ agent, commands, onCommand }: { agent: AgentPort; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   dispatchRef = dispatch;
   return (
@@ -22,6 +23,8 @@ function Harness({ agent }: { agent: AgentPort }) {
       header={{ status: "ready", agentName: "rad-report-agent", level: 1, model: "gpt-5" }}
       agent={agent}
       audit={[]}
+      commands={commands}
+      onCommand={onCommand}
     />
   );
 }
@@ -88,6 +91,38 @@ describe("Sidebar", () => {
       fireEvent.click(screen.getByText("Stop"));
     });
     expect(agent.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a cancelled turn as stopped until the next prompt", () => {
+    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    render(<Harness agent={agent} />);
+    act(() => dispatchRef!({ type: "user", text: "/impression" }));
+    update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Reading…" } });
+    act(() => dispatchRef!({ type: "turn_end", stopReason: "cancelled" }));
+    expect(screen.getByTestId("stopped").textContent).toBe("stopped");
+    act(() => dispatchRef!({ type: "user", text: "again" }));
+    expect(screen.queryByTestId("stopped")).toBeNull();
+  });
+
+  it("composer / lists the registry and runs the picked command", async () => {
+    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const onCommand = vi.fn();
+    const groups: CommandGroups = {
+      suggested: [],
+      editor: [{ id: "template", kind: "document", description: "Scaffold the house template" }],
+      skills: [{ id: "impression", kind: "skill", description: "Draft the impression" }],
+    };
+    render(<Harness agent={agent} commands={() => groups} onCommand={onCommand} />);
+    const input = screen.getByPlaceholderText(/Ask the agent/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "/" } });
+    input.setSelectionRange(1, 1);
+    fireEvent.select(input);
+    const item = await screen.findByText("/template");
+    await act(async () => {
+      fireEvent.click(item);
+    });
+    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({ id: "template" }));
+    expect(agent.prompt).not.toHaveBeenCalled();
   });
 });
 

@@ -130,12 +130,44 @@ describe("ProposalStore", () => {
 });
 
 describe("answerFor", () => {
-  const base = { toolCallId: "t", path: SECTION, section: "impression" as const, hunks: [], baseText: "", state: "pending" as const, createdAt: "" };
+  const base = { toolCallId: "t", origin: "agent" as const, path: SECTION, section: "impression" as const, hunks: [], baseText: "", state: "pending" as const, createdAt: "" };
   it("prefers accept_edit when any hunk was accepted for review", () => {
     expect(answerFor({ ...base, states: { h1: "accept_edit" }, options: CLINICAL }, true)).toEqual({ outcome: "selected", optionId: "accept_edit" });
     expect(answerFor({ ...base, states: { h1: "accept" }, options: CLINICAL }, true)).toEqual({ outcome: "selected", optionId: "accept" });
   });
   it("cancels when no usable option exists", () => {
     expect(answerFor({ ...base, states: {}, options: [] }, true)).toEqual({ outcome: "cancelled" });
+  });
+});
+
+describe("local proposals (editor commands, option C)", () => {
+  const REPORT = "/worklist/ACC1/report.md";
+  const CURRENT_REPORT = "**T**\n\n**IMPRESSION:**\n- ...\n";
+  const NEXT = "**T**\n\n**HISTORY:** ___\n\n**IMPRESSION:**\n- ...\n";
+
+  it("is decided in the report with no grant and no permission answer", async () => {
+    const store = new ProposalStore(ACC);
+    const events: string[] = [];
+    store.subscribe((e) => events.push(e.type));
+    const p = store.fromLocal("cmd-1", REPORT, NEXT, CURRENT_REPORT, { command: "template" })!;
+    expect(p.origin).toBe("local");
+    expect(p.section).toBeNull();
+    await expect(store.awaitPermission("cmd-1", CLINICAL)).resolves.toEqual({ outcome: "cancelled" });
+    store.decideAll("cmd-1", "accept_edit");
+    expect(Object.values(p.states)).toEqual(["accept"]); // house text never lands unreviewed
+    expect(p.state).toBe("applied");
+    expect(store.takeGrant(REPORT)).toBeUndefined();
+    expect(events).toEqual(["proposed", "decided", "write"]);
+  });
+
+  it("is invisible to the agent's permission matching and survives the agent's cancel", () => {
+    const store = new ProposalStore(ACC);
+    store.fromLocal("cmd-1", REPORT, NEXT, CURRENT_REPORT, { command: "template" });
+    expect(store.matchPending(REPORT)).toBeUndefined();
+    const agentP = store.fromDiff("a", { path: REPORT, oldText: "- ...", newText: "- A." }, CURRENT_REPORT)!;
+    expect(store.matchPending(REPORT)?.toolCallId).toBe(agentP.toolCallId);
+    store.cancelAll();
+    expect(store.get("a")?.state).toBe("cancelled");
+    expect(store.get("cmd-1")?.state).toBe("pending");
   });
 });

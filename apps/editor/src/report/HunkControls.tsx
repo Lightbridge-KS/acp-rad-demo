@@ -12,7 +12,7 @@ type Props = {
   onDecide: (toolCallId: string, hunkId: string, verb: Verb) => void;
 };
 
-type Pill = { toolCallId: string; hunkId: string; label: string; top: number; conflict: boolean };
+type Pill = { toolCallId: string; hunkId: string; label: string; top: number; conflict: boolean; local: boolean };
 
 /** Floating per-change verbs, anchored to the first line of each pending hunk (design 02 §5.1). */
 export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
@@ -36,6 +36,7 @@ export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
           label: `change ${i + 1}/${p.hunks.length} · ${p.section ?? "whole report"}`,
           top: bounds.top,
           conflict: state === "conflict",
+          local: p.origin === "local",
         });
       });
     }
@@ -59,9 +60,11 @@ export function HunkControls({ quill, proposals, tick, onDecide }: Props) {
           ) : (
             <>
               <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept")}>Accept</Btn>
-              <Btn tone="review" onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept_edit")}>
-                Accept for review
-              </Btn>
+              {!pill.local && (
+                <Btn tone="review" onClick={() => onDecide(pill.toolCallId, pill.hunkId, "accept_edit")}>
+                  Accept for review
+                </Btn>
+              )}
               <Btn onClick={() => onDecide(pill.toolCallId, pill.hunkId, "reject")}>Reject</Btn>
             </>
           )}

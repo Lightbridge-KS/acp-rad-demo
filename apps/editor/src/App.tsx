@@ -1,12 +1,17 @@
 import type Quill from "quill";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { markdownToDelta, type AuditRecord } from "acp-rad";
+import { markdownToDelta, sectionIdOfLine, type AuditRecord, type ReportStatus, type SectionId } from "acp-rad";
 import { connectAgent, type AgentHandle } from "./agent/connection.ts";
 import { AuditLog } from "./audit/log.ts";
-import { defaultCase } from "./fixtures/index.ts";
+import { applyEffect } from "./commands/apply.ts";
+import { CommandsButton } from "./commands/CommandsButton.tsx";
+import { isBlankBuffer } from "./commands/document.ts";
+import { listCommands, runEditorCommand, type Command, type CommandContext, type CommandGroups } from "./commands/registry.ts";
+import { SlashMenu } from "./commands/SlashMenu.tsx";
+import { cases, defaultCase, snippets, templates, type CaseFixture } from "./fixtures/index.ts";
 import { HunkControls } from "./report/HunkControls.tsx";
 import { ReportEditor } from "./report/ReportEditor.tsx";
-import { clearAllUnreviewed, decideHunkOps, discardHunksOps, overlayOps, unreviewedLineCount } from "./report/overlay.ts";
+import { clearAllUnreviewed, decideHunkOps, discardHunksOps, isInsertLine, lineLength, lineText, overlayOps, splitLines, unreviewedLineCount } from "./report/overlay.ts";
 import { applyOps, currentOps } from "./report/overlayQuill.ts";
 import { ProposalStore, type Proposal, type Verb } from "./report/proposals.ts";
 import { makeReportStore } from "./report/reportStore.ts";
@@ -16,18 +21,33 @@ import { diffOf, initialSidebarState, sidebarReducer } from "./sidebar/store.ts"
 const BRIDGE_URL: string =
   (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? "ws://localhost:8787/acp?agent=rad";
 
+/** `?case=<id>` picks a fixture until the worklist lands (slice 6). */
+function caseFromUrl(): CaseFixture {
+  const id = new URLSearchParams(window.location.search).get("case");
+  return cases.find((c) => c.id === id) ?? defaultCase;
+}
+
 export default function App() {
-  const fixture = defaultCase;
+  const fixture = useMemo(caseFromUrl, []);
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   const [header, setHeader] = useState<HeaderState>({ status: "disconnected" });
   const [quill, setQuill] = useState<Quill | null>(null);
   const [proposalList, setProposalList] = useState<Proposal[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
+  const [hint, setHint] = useState<string | null>(null);
+  // Report lifecycle (design 02 §5.2): status moves only by explicit acts (slice 6); the
+  // short-prelim property is set by /short-prelim and cleared by the fold-in.
+  const [status] = useState<ReportStatus>(fixture.session.reportStatus);
+  const [shortPrelim, setShortPrelim] = useState<boolean>(fixture.session.shortPrelim);
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const agentRef = useRef<AgentHandle | null>(null);
   const initialOps = useMemo(() => markdownToDelta(fixture.reportMarkdown), [fixture]);
   const proposals = useMemo(() => new ProposalStore(fixture.session.accession), [fixture]);
   const audit = useMemo(() => new AuditLog(), [fixture]);
+  // One ReportStore for the agent (fs/*) and the editor commands: live Quill, overlays stripped.
+  const store = useMemo(() => (quill ? makeReportStore(quill, fixture, () => statusRef.current) : null), [quill, fixture]);
 
   // Render a proposal as tracked changes; report anchors that could not be found.
   const renderProposal = useCallback(
@@ -44,15 +64,18 @@ export default function App() {
   useEffect(() => {
     const refresh = () => setProposalList(proposals.list());
     return proposals.subscribe((e) => {
+      const local = e.proposal.origin === "local";
       switch (e.type) {
         case "proposed":
-          audit.record("proposal.received", { toolCallId: e.proposal.toolCallId, path: e.proposal.path, outcome: `${e.proposal.hunks.length} hunks` });
+          if (local) audit.record(`command.${e.proposal.local?.command ?? "?"}`, { toolCallId: e.proposal.toolCallId, path: e.proposal.path, outcome: `proposal · ${e.proposal.hunks.length} hunks` });
+          else audit.record("proposal.received", { toolCallId: e.proposal.toolCallId, path: e.proposal.path, outcome: `${e.proposal.hunks.length} hunks` });
           break;
         case "decided":
           if (quill) applyOps(quill, decideHunkOps(currentOps(quill), e.hunkId, e.verb, e.proposal.toolCallId));
           audit.record(`hunk.${e.verb}`, { toolCallId: e.proposal.toolCallId, hunkId: e.hunkId, path: e.proposal.path });
           break;
         case "answered":
+          if (local) break; // no tool card mirrors a local proposal
           if (e.answer.outcome === "selected") dispatch({ type: "permission_resolved", toolCallId: e.proposal.toolCallId, optionId: e.answer.optionId });
           else dispatch({ type: "permission_cancelled", toolCallId: e.proposal.toolCallId });
           break;
@@ -61,6 +84,11 @@ export default function App() {
           dispatch({ type: "permission_cancelled", toolCallId: e.proposal.toolCallId });
           break;
         case "write":
+          // A fold-in decided with at least one Accept: the buffer is no longer a short prelim.
+          if (local && e.proposal.local?.folded && Object.values(e.proposal.states).includes("accept")) {
+            setShortPrelim(false);
+            audit.record("short_prelim.folded", { toolCallId: e.proposal.toolCallId });
+          }
           break;
       }
       if (quill) setUnreviewedCount(unreviewedLineCount(currentOps(quill)));
@@ -72,9 +100,8 @@ export default function App() {
 
   // Connect once the editor exists: the ReportStore serves fs/* from live Quill state.
   useEffect(() => {
-    if (!quill) return;
+    if (!quill || !store) return;
     let cancelled = false;
-    const store = makeReportStore(quill, fixture);
     setHeader({ status: "connecting" });
     dispatch({ type: "reset" });
     connectAgent(BRIDGE_URL, fixture.session, store, proposals, audit, {
@@ -122,7 +149,7 @@ export default function App() {
       agentRef.current?.close();
       agentRef.current = null;
     };
-  }, [quill, fixture, proposals, audit, renderProposal]);
+  }, [quill, store, fixture, proposals, audit, renderProposal]);
 
   const agentPort = useMemo<AgentPort | null>(
     () =>
@@ -147,6 +174,74 @@ export default function App() {
     [header.status],
   );
 
+  // ---- commands: one registry, three surfaces -------------------------------------------
+
+  const commandContext = useCallback((): CommandContext => {
+    const markdown = store?.reportMarkdown() ?? "\n";
+    const caret = quill ? caretInfo(quill) : { caretSection: null, caretAtEnd: false };
+    return {
+      blank: isBlankBuffer(markdown),
+      shortPrelim,
+      caretSection: caret.caretSection,
+      caretAtEnd: caret.caretAtEnd,
+      hasPriors: Object.keys(fixture.priors).length > 0,
+      level: header.status === "ready" ? header.level : undefined,
+      skills: state.commands,
+    };
+  }, [store, quill, shortPrelim, fixture, header.status, header.level, state.commands]);
+  const commands = useCallback((): CommandGroups => listCommands(commandContext()), [commandContext]);
+
+  const runCommand = useCallback(
+    (command: Command, arg?: string) => {
+      setHint(null);
+      if (command.kind === "skill") {
+        const text = `/${command.id}${arg ? ` ${arg}` : ""}`;
+        if (!agentPort) {
+          setHint("the agent is not connected");
+          return;
+        }
+        audit.record(`command.${command.id}`, { outcome: "skill" });
+        dispatch({ type: "user", text });
+        void agentPort.prompt(text);
+        return;
+      }
+      if (!quill || !store) return;
+      const effect = runEditorCommand(command.id, arg, {
+        markdown: store.reportMarkdown(),
+        meta: fixture.meta,
+        region: fixture.session.region,
+        shortPrelim,
+        templates,
+        snippets,
+      });
+      const result = applyEffect(effect, {
+        quill,
+        accession: fixture.session.accession,
+        proposals,
+        currentMarkdown: () => store.reportMarkdown(),
+        renderProposal,
+        commandId: command.id,
+      });
+      switch (result.outcome) {
+        case "instant":
+          audit.record(`command.${command.id}`, { outcome: "instant" });
+          if (result.shortPrelim !== undefined) setShortPrelim(result.shortPrelim);
+          if (result.folded) audit.record("short_prelim.folded");
+          break;
+        case "caret":
+          audit.record(`command.${command.id}`, { outcome: "already present" });
+          break;
+        case "hint":
+          setHint(result.text);
+          break;
+        case "proposal":
+          break; // audited on the `proposed` event
+      }
+      setUnreviewedCount(unreviewedLineCount(currentOps(quill)));
+    },
+    [agentPort, audit, quill, store, fixture, shortPrelim, proposals, renderProposal],
+  );
+
   const decide = useCallback((toolCallId: string, hunkId: string, verb: Verb) => proposals.decide(toolCallId, hunkId, verb), [proposals]);
   const pending = proposalList.filter((p) => p.state === "pending");
   const pendingHunks = pending.reduce((n, p) => n + p.hunks.filter((h) => p.states[h.id] === "pending").length, 0);
@@ -157,6 +252,11 @@ export default function App() {
         <span className="font-semibold">ACP-Rad</span>
         <span className="text-gray-500">{fixture.title}</span>
         <span className="text-xs text-gray-400">{fixture.session.accession}</span>
+        {hint && (
+          <span data-testid="hint" className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            {hint}
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-2 text-xs">
           {pendingHunks > 0 && (
             <span className="flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-50 px-2 py-0.5">
@@ -186,10 +286,11 @@ export default function App() {
               </button>
             </span>
           )}
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
-            {fixture.session.reportStatus}
-            {fixture.session.shortPrelim ? " · short prelim" : ""} · {fixture.session.phiBoundary}
+          <span data-testid="status" className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
+            {status}
+            {shortPrelim ? " · short prelim" : ""}
           </span>
+          <span className="text-gray-400">{fixture.session.phiBoundary}</span>
         </span>
       </header>
       <main className="min-h-0 overflow-hidden">
@@ -200,12 +301,46 @@ export default function App() {
           onUserChange={(q) => {
             setUnreviewedCount(unreviewedLineCount(currentOps(q)));
           }}
-          overlay={(q, tick) => <HunkControls quill={q} proposals={proposalList} tick={tick} onDecide={decide} />}
+          overlay={(q, tick) => (
+            <>
+              <HunkControls quill={q} proposals={proposalList} tick={tick} onDecide={decide} />
+              <SlashMenu quill={q} tick={tick} commands={commands} onRun={runCommand} />
+              <CommandsButton commands={commands} onRun={runCommand} />
+            </>
+          )}
         />
       </main>
-      <Sidebar state={state} dispatch={dispatch} header={header} agent={agentPort} audit={auditRecords} />
+      <Sidebar state={state} dispatch={dispatch} header={header} agent={agentPort} audit={auditRecords} commands={commands} onCommand={runCommand} />
     </div>
   );
+}
+
+/** Which section the caret is in (overlay lines skipped) and whether it sits on the last line. */
+function caretInfo(quill: Quill): { caretSection: SectionId | null; caretAtEnd: boolean } {
+  const sel = quill.getSelection();
+  const lines = splitLines(currentOps(quill));
+  if (!sel || lines.length === 0) return { caretSection: null, caretAtEnd: false };
+  let idx = 0;
+  let li = lines.length - 1;
+  for (let i = 0; i < lines.length; i++) {
+    const len = lineLength(lines[i]!);
+    if (sel.index < idx + len) {
+      li = i;
+      break;
+    }
+    idx += len;
+  }
+  let caretSection: SectionId | null = null;
+  for (let i = li; i >= 0; i--) {
+    const line = lines[i]!;
+    if (isInsertLine(line)) continue;
+    const id = sectionIdOfLine(lineText(line));
+    if (id) {
+      caretSection = id;
+      break;
+    }
+  }
+  return { caretSection, caretAtEnd: li === lines.length - 1 };
 }
 
 function safe<T>(fn: () => T): T | null {
@@ -215,3 +350,4 @@ function safe<T>(fn: () => T): T | null {
     return null;
   }
 }
+
