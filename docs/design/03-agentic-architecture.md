@@ -92,15 +92,15 @@ sequenceDiagram
 | Tools | `agent.py` `FS_TOOLS = ls, read_file, glob, grep, edit_file, write_file` via `FilesystemMiddleware(backend=AcpClientBackend)` | core code (deepagents) over an adapter (ours) | ✅ |
 | Tool backend | `backend.py` `AcpClientBackend`: `aread`→`fs/read_text_file`; `als`/`aglob`/`agrep` answered from the session **manifest** (ACP v1 has no `ls`); `aedit`/`awrite` do read-modify-write → `fs/write_text_file` | ours | ✅ |
 | Read-only zones | `FilesystemPermission(operations=["write"], paths=["/priors/**", "/templates/**", "/snippets/**"], mode="deny")` — defense in depth; the editor refuses them too (`-32003`) | authored config | ✅ |
-| Skills (`/impression`, `/compare`, `/proofread`) | `RadReportAgentServer` sends `available_commands_update` after `session/new` and expands the command text at prompt time | ours | *planned* slice 4 |
+| Skills (`/impression`, `/compare`, `/proofread`) | `RadReportAgentServer` sends `available_commands_update` after `session/new` and expands the command text at prompt time — one `prompts/skills/<name>.md` per skill, spec in [04-skills](./04-skills.md) | ours | *planned* slice 4 |
 | Skills (deepagents `skills=`, `skills-radreport`) | would load `SKILL.md` folders **through the backend** — needs a `CompositeBackend` route to a local `FilesystemBackend` | authored content | ❌ decided out until slice 5+ |
-| `raise_critical_finding` tool → `_rad/critical_finding` | `server.py` `ext_method` seam | ours | *planned* slice 5 |
+| `raise_flag` tool → `_rad/flag` | `server.py` `ext_method` seam | ours | *planned* slice 5 |
 | MCP | `session/new.mcpServers: []` | — | ❌ absent, decided: v1 profile rides on `fs/*`; MCP-over-ACP is the v2 path for the `ReportStore` seam |
 
 ## 6. Orchestration & Autonomy
 
 - **Subagents** — absent, decided: one agent, one report, one turn at a time; `deepagents-acp` supports one active session per process anyway.
-- **Hooks / triggers / scheduling** — absent. The agent is purely reactive to `session/prompt`. The vision-model path (`/worklist/{acc}/cad/findings.md`, RO) is a *file*, not a trigger: upstream models write it, the agent reads it when asked.
+- **Hooks / triggers / scheduling** — absent. The agent is purely reactive to `session/prompt` — the QA gate (04 §3.5) is the *editor* sending `/qa` at Prelim / Sign off, not an agent trigger. The vision-model path (`/worklist/{acc}/cad/findings.md`, RO) is a *file*, not a trigger: upstream models write it, the agent reads it when asked.
 - **Permissions / guardrails / HITL — the human gate (INV-1), the distinctive organ, split across the boundary:**
 
 ```mermaid
@@ -149,11 +149,11 @@ flowchart LR
 | Hooks / scheduling | ❌ | — | reactive only |
 | Permissions / HITL | ✅ | agent `interrupt_on` + `PermissionRewritingClient`; editor `ProposalStore` + grants | guarantee lives in the editor |
 | Session / state / event bus | ✅ | bridge spawn-per-connection; `session_rad`; sidebar reducer; `AuditLog` | one session per process |
-| Critical-finding channel | ⚠️ planned | `_rad/critical_finding` via `ext_method` | slice 5 |
+| Flag channel | ⚠️ planned | `_rad/flag` via `ext_method` | slice 5 |
 
 ## 9. Glossary & Decisions Needed
 
-Terms: see [`CONTEXT.md`](../../CONTEXT.md) (Agent, Level, Skill, Human gate, Proposal, Hunk, Grant, Unsolicited write, Critical finding).
+Terms: see [`CONTEXT.md`](../../CONTEXT.md) (Agent, Level, Skill, Human gate, Proposal, Hunk, Grant, Unsolicited write, Flag, Critical finding).
 
 - 💡 **`skills=` transport** (slice 5+): `CompositeBackend(default=AcpClientBackend, routes={"/skills/": FilesystemBackend(local)})` so `SKILL.md` folders load from disk while report I/O stays on the client — versus keeping skills as prompt-expanded commands only. Decide when `write-ct-brain` is scheduled.
 - Known limitation v0.1: after a `partial` write the model's tool result still says "replaced 1 instance" (`EditResult` cannot carry `_meta`); the prompt tells it to re-read. v0.2: a `_rad/` notification.

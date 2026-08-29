@@ -21,7 +21,7 @@ However, ACP assumes an IDE editing source-code files. A radiology report editor
 2. The document has **clinical structure** (sections; sometimes fixed organ fields) that plain text diffs handle lossily.
 3. Every agent interaction is a **medico-legal event** requiring an audit trail (PDPA, hospital QMS).
 4. The write path must be **proposal-only by construction** — an agent must never be able to place text into a signed report without explicit human acceptance.
-5. Some agent outputs are **alerts, not edits** (e.g., a QA agent spotting a findings/impression discrepancy).
+5. Some agent outputs are **flags, not edits** (e.g., a QA agent spotting a findings/impression discrepancy).
 
 ACP-Rad is a *profile*: a set of conventions, extensions, and prunings over vanilla ACP such that
 
@@ -54,7 +54,7 @@ Level 1  "Rad-aware"    Understands focus state and clinical
 
 Level 2  "Rad-native"   Emits structured section patches with
                         optional clinical codes; may raise
-                        critical-finding alerts.
+                        QA flags.
 ```
 
 The Client MUST support all three levels simultaneously. The Agent's level is inferred from the `_meta.rad` capabilities it advertises (§6); absence of `_meta.rad` ⇒ Level 0.
@@ -144,7 +144,7 @@ Rules:
       "profileVersion": "0.1",
       "focusState": true,
       "structuredPatch": true,
-      "criticalFindings": true,
+      "flags": true,
       "clinicalPermissionVerbs": true,
       "codedContent": ["RadLex", "ICD10"]
     }
@@ -167,13 +167,13 @@ The Agent echoes the subset it implements:
       "profileVersion": "0.1",
       "focusState": true,
       "structuredPatch": true,
-      "criticalFindings": false
+      "flags": false
     }
   }
 }
 ```
 
-Level = 0 if `_meta.rad` absent; 1 if present without `structuredPatch`/`criticalFindings`; 2 otherwise.
+Level = 0 if `_meta.rad` absent; 1 if present without `structuredPatch`/`flags`; 2 otherwise.
 
 ## 7. Proposal flow and permission model
 
@@ -241,16 +241,16 @@ type FocusState = {
 };
 ```
 
-### 8.2 `_rad/critical_finding` — Agent → Client request
+### 8.2 `_rad/flag` — Agent → Client request
 
-For QA-mode discrepancy alerts. A *request* (not notification) so the Client's acknowledgment is itself auditable. Requires negotiated `criticalFindings`. The Client MUST render it as an alert and MUST NOT auto-edit anything in response.
+For QA flags — the agent found the report wanting; a *critical finding* in the radiology sense is an imaging finding, never this message. A *request* (not notification) so the Client's acknowledgment is itself auditable. Requires negotiated `flags`. The Client MUST render it as a flag card and MUST NOT auto-edit anything in response.
 
 ```json
 {
-  "method": "_rad/critical_finding",
+  "method": "_rad/flag",
   "params": {
     "sessionId": "sess_abc",
-    "severity": "discrepancy",
+    "kind": "discrepancy",
     "summary": "Impression omits the incidental 8 mm lung nodule described in FINDINGS.",
     "locations": [
       { "path": "/worklist/ACC1234567/sections/findings.md", "line": 12 }
@@ -260,13 +260,13 @@ For QA-mode discrepancy alerts. A *request* (not notification) so the Client's a
 ```
 
 ```ts
-type CriticalFinding = {
+type Flag = {
   sessionId: string;
-  severity: "critical" | "urgent" | "discrepancy" | "info";
+  kind: "discrepancy" | "omission" | "unsupported" | "critical_uncommunicated";
   summary: string;                 // human-readable, ≤ 500 chars
   locations?: { path: string; line?: number }[];
 };
-type CriticalFindingResponse = {
+type FlagResponse = {
   outcome: "acknowledged" | "dismissed";
 };
 ```
@@ -323,7 +323,7 @@ Agents MUST treat `phiBoundary` as informational; enforcement is entirely Client
 
 ### 9.2 Audit record
 
-The Client MUST persist an append-only audit record for every: session lifecycle event, `fs/*` call, tool_call reported, permission round-trip, `_rad/critical_finding` round-trip. Stamped Client-side (never trusted from Agent input):
+The Client MUST persist an append-only audit record for every: session lifecycle event, `fs/*` call, tool_call reported, permission round-trip, `_rad/flag` round-trip. Stamped Client-side (never trusted from Agent input):
 
 ```ts
 type AuditRecord = {

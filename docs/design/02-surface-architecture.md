@@ -6,7 +6,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 # ACP-Rad PoC — Surface Architecture (UX · AX)
 
 > Source: this repo (as built through slice 3) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (*planned* = slice 4+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
-> See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)
+> See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)
 
 ## Cheat Sheet
 
@@ -20,6 +20,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 | Clear amber (unreviewed) text | edit the line, or **Mark all reviewed** |
 | Compare with the prior | `/compare` — *planned* |
 | Mark attending review | `/er-reviewed` · `/er-not-reviewed` — *planned* |
+| Check before issuing | `/qa` → flag cards; **Prelim** / **Sign off** run it as the QA gate — *planned* (slices 5–6) |
 | Stop the agent | **Stop** in the sidebar |
 | See what happened | sidebar **Audit** tab (same records as `audit/{accession}.jsonl`) |
 
@@ -54,12 +55,12 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 | Report (Quill) | Types freely, always. Bold/italic/lists only. Undo covers own edits only. |
 | Change pill | Decides one change (a hunk): Accept (lands plain) · Accept for review (lands amber) · Reject. |
 | Header counters | Bulk decide pending changes; clear all unreviewed text. |
-| Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions; `final` locks writes. |
+| Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions behind the QA gate (04 §3.5); `final` locks writes. |
 | `Commands ▾` (toolbar) | The full command list, grouped. *planned* |
 | `/` in the report | Notion-style menu at the caret; filters as you type. *planned* |
 | Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with `/` menu; Send / Stop. |
 | Sidebar · Audit | Live audit trail. |
-| Alert card | `_rad/critical_finding` acknowledgement — the one decision the sidebar owns. *planned* (slice 5) |
+| Flag card | `_rad/flag` acknowledgement — the one decision the sidebar owns. *planned* (slice 5) |
 | Worklist | 3 synthetic cases. *planned* (slice 6); until then a `?case=<id>` URL parameter (*planned*, slice 4). |
 
 ### 2.2 Commands
@@ -81,11 +82,11 @@ flowchart TD
 | `/template [id]` | document | Instantiate a house template from the study's `meta.json`: `[Male]`/`[female]` lines resolved by sex, dose filled, `___` clinical blanks kept. Blank buffer → instant; non-blank → tracked changes (option C). If the buffer is a short prelim, the SP text (minus "A full report will follow.") is **folded in** between the impression items and the discussed-with line, and `shortPrelim` clears. | whole buffer; `id` defaults to `meta.study.template` |
 | `/short-prelim [region]` | document | Buffer := the region's SP paragraph, nothing else; `shortPrelim := true`. Same blank/non-blank rule. | whole buffer; region defaults to `session.region` (`brain`, `chest`, `body`) |
 | `/er-reviewed` · `/er-not-reviewed` | snippet | Attending-review marker line. A toggle set: one replaces the other. No status effect. | impression head (after `**IMPRESSION:**`, before items) |
-| `/discuss-with-dr` | snippet | "The findings about ___ … discussed with Dr.____ …" line with blanks. | report end |
-| `/impression` | skill | Agent reads FINDINGS, proposes the IMPRESSION items. | proposal on `sections/impression.md` |
-| `/compare` | skill | Agent reads `/priors/…`, proposes COMPARISON text. | proposal on `sections/comparison.md` |
-| `/proofread` | skill | Agent proposes wording fixes, section by section. | proposals |
-| `/qa` *(slice 5)* | skill | Findings/impression discrepancy → alert card; no edit. | `_rad/critical_finding` |
+| `/discuss-with-dr` | snippet | "The findings about ___ … discussed with Dr.____ …" line with blanks. **Idempotent** (KS, 2026-08-30): if the line already exists (templates end with it), scroll to it and place the caret in its first blank — never a second line. | report end |
+| `/impression` | skill | Agent reads FINDINGS, proposes the IMPRESSION items. Spec: [04 §3.1](./04-skills.md). | proposal on `sections/impression.md` |
+| `/compare [prior]` | skill | Agent reads `/priors/index.md` and every prior of the **same patient** whose anatomy overlaps (any modality); makes the COMPARISON line true (dates verified against the index) and states interval change on the organ lines that have a counterpart. Spec: [04 §3.2](./04-skills.md). | proposals on `sections/comparison.md` + `sections/findings.md` |
+| `/proofread [section]` | skill | Wording and house style, plus consistency (laterality, size, count between FINDINGS and IMPRESSION — fix proposed on the IMPRESSION side). Spec: [04 §3.3](./04-skills.md). | one proposal per section that needs a fix |
+| `/qa` *(slice 5)* | skill | Reads the report, raises flags — `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` — as cards; no edit. Also run by the QA gate at Prelim / Sign off. Spec: [04 §3.5](./04-skills.md). | `_rad/flag` |
 
 Rules: editor commands insert **instantly** with source `user` (⌘Z undoes; audited as `command.<id>`) — the radiologist's invocation *is* INV-1's explicit act. Snippets are **home-anchored**: wherever the menu was summoned, the text lands at its home and scrolls into view. Skills from a Level 0 agent are not shown (they list the host user's personal skills).
 
@@ -181,11 +182,11 @@ stateDiagram-v2
     draft --> preliminary: Prelim (slice 6)
     preliminary --> final: Sign off (slice 6)
     draft --> final: Sign off (attending)
-    note right of draft: shortPrelim flag may be true while draft
+    note right of draft: shortPrelim may be true while draft
     note right of final: write-lock — every fs/write ⇒ -32003, /qa stays available
 ```
 
-`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. Roles (resident: draft/preliminary; attending: also final) are display-only in the PoC.
+`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. **Prelim** and **Sign off** pass through the QA gate (04 §3.5): a deterministic check (no pending changes, no unreviewed text, no `___` blanks) that refuses, then `/qa` whose flags are advisory — *Sign off anyway* is always available and audited (`qa.passed` · `qa.overridden` · `qa.skipped`). An SP skips the agent gate. Roles (resident: draft/preliminary; attending: also final) are display-only in the PoC.
 
 ### 5.3 Connection & turn
 
@@ -194,7 +195,7 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 ## 6. Information Architecture & Naming
 
 - **Two namespaces, one grammar.** Every command is `/verb-noun` or `/noun`; editor commands are nouns for *what lands* (`/template`, `/er-reviewed`), skills are verbs for *what the agent does* (`/impression` is the exception kept for demo brevity). The `/` menu groups by who acts: **Suggested · Editor · Skills**.
-- **Judgment happens in the report.** Verbs on change pills, counters in the header, mirrors in the sidebar — the sidebar never owns a decision except the QA alert.
+- **Judgment happens in the report.** Verbs on change pills, counters in the header, mirrors in the sidebar — the sidebar never owns a decision except the QA flag.
 - **Colour = provenance.** Green overlay = proposed, not in the buffer. Amber = in the buffer, unreviewed AI text. Plain = the radiologist's.
 - **Report grammar is house style.** Label-lines, no headings; the editor never auto-bolds or reflows.
 - **AX.** The agent gets a self-describing file tree (manifest), one canonical serialization, errors that name the next move, and an outcome on every write — the same surface for our agent and for any registry agent.
@@ -213,4 +214,5 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 ## 8. Decisions Needed
 
 - 💡 **`/sign-off`**: an editor command in the same registry (fits "one list, three surfaces") or only an action on the status pill (fits "status transitions are explicit, not commands")? Decide at slice-6 planning; the registry design must not preclude either.
+- 💡 **Prelim and the QA gate**: run `/qa` at Prelim as well as Sign off (recommended), or exempt Prelim like the short prelim? See 04 §3.5. Decide at slice-6 planning.
 - 💡 **Case switching before slice 6**: `?case=<id>` is the cheapest way to reach the prior-bearing cases for `/compare`; confirm it is acceptable demo UX until the worklist lands, or pull the switcher forward.

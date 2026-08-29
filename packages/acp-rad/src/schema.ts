@@ -39,7 +39,7 @@ export type CodeSystem = z.infer<typeof zCodeSystem>;
 export const zRadClientCaps = z.object({
   profileVersion: z.string(),
   focusState: z.boolean().default(false),
-  criticalFindings: z.boolean().default(false),
+  flags: z.boolean().default(false),
   clinicalPermissionVerbs: z.boolean().default(false),
   codedContent: z.array(zCodeSystem).default([]),
 });
@@ -49,7 +49,7 @@ export type RadClientCaps = z.infer<typeof zRadClientCaps>;
 export const zRadAgentCaps = z.object({
   profileVersion: z.string(),
   focusState: z.boolean().default(false),
-  criticalFindings: z.boolean().default(false),
+  flags: z.boolean().default(false),
   codedContent: z.array(zCodeSystem).default([]),
   /** Informational: the model the agent is running (for display and audit). */
   model: z.string().optional(),
@@ -60,13 +60,13 @@ export type ProfileLevel = 0 | 1 | 2;
 
 /**
  * Conformance level inferred from an agent's `initialize` result `_meta`.
- * 0 = vanilla ACP agent; 1 = rad-aware; 2 = rad-native (alerts and/or codes).
+ * 0 = vanilla ACP agent; 1 = rad-aware; 2 = rad-native (flags and/or codes).
  * Tolerant: a malformed `rad` block degrades to Level 0 rather than throwing.
  */
 export function levelOf(initMeta: Record<string, unknown> | null | undefined): ProfileLevel {
   const caps = readRadAgentCaps(initMeta);
   if (!caps) return 0;
-  return caps.criticalFindings || caps.codedContent.length > 0 ? 2 : 1;
+  return caps.flags || caps.codedContent.length > 0 ? 2 : 1;
 }
 
 /** Parse `_meta.rad` from an agent's initialize result; `undefined` if absent or malformed. */

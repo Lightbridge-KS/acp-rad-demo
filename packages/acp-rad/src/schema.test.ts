@@ -16,7 +16,7 @@ describe("levelOf", () => {
     ["malformed rad block", { rad: { profileVersion: 1 } }, 0],
     ["rad present, no L2 caps", { rad: { profileVersion: "0.1" } }, 1],
     ["focusState only is still L1", { rad: { profileVersion: "0.1", focusState: true } }, 1],
-    ["criticalFindings ⇒ L2", { rad: { profileVersion: "0.1", criticalFindings: true } }, 2],
+    ["flags ⇒ L2", { rad: { profileVersion: "0.1", flags: true } }, 2],
     ["codedContent ⇒ L2", { rad: { profileVersion: "0.1", codedContent: ["RadLex"] } }, 2],
   ])("%s → level %i", (_name, meta, expected) => {
     expect(levelOf(meta)).toBe(expected);
@@ -29,7 +29,7 @@ describe("schemas", () => {
     expect(caps).toEqual({
       profileVersion: "0.1",
       focusState: false,
-      criticalFindings: false,
+      flags: false,
       clinicalPermissionVerbs: false,
       codedContent: [],
     });

@@ -33,7 +33,7 @@ export const CLIENT_INFO = { name: "acp-rad-editor", version: "0.1.0" } as const
 export const CLIENT_RAD_CAPS: RadClientCaps = {
   profileVersion: PROFILE_VERSION,
   focusState: true,
-  criticalFindings: true,
+  flags: true,
   clinicalPermissionVerbs: true,
   codedContent: [],
 };

@@ -203,9 +203,9 @@ Editor commands never touch the agent; they share the overlay machinery of §6.1
 
 Editor sends `session/cancel`; `ProposalStore.cancelAll()` discards rendered hunks and answers every in-flight `request_permission` with `cancelled` (ACP contract); the agent returns `stopReason: cancelled`. *Planned:* visible "stopped" marker on the interrupted turn.
 
-### 6.4 QA alert (Level 2 method, *planned* slice 5)
+### 6.4 QA flag (Level 2 method, *planned* slice 5)
 
-Agent tool `raise_critical_finding` → `_rad/critical_finding` request → editor alert card (the one decision the sidebar owns) → `{outcome: "acknowledged"}` → audit. No edit is made.
+Agent tool `raise_flag(kind, summary, locations)` → `_rad/flag` request → editor flag card (the one decision the sidebar owns) → `{outcome: "acknowledged"}` → audit `flag.raised` / `flag.acknowledged`. No edit is made. Kinds: `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` (design 04 §3.5). The same path serves the QA gate at Prelim / Sign off (slice 6): the editor sends `/qa` and counts the flags; the agent never knows it is a gate.
 
 ## 7. Extension Points
 

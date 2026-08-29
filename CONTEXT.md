@@ -30,7 +30,7 @@ The report editor — the ACP peer that owns the document, the human gate, and t
 _Avoid_: frontend, host
 
 **Level**:
-An agent's conformance tier to the profile: 0 vanilla ACP, 1 rad-aware (clinical verbs, focus), 2 rad-native (critical findings, codes).
+An agent's conformance tier to the profile: 0 vanilla ACP, 1 rad-aware (clinical verbs, focus), 2 rad-native (flags, codes).
 
 ## Study & report
 
@@ -154,7 +154,7 @@ Where a report is in its life: **draft** → **preliminary** (optional) → **fi
 _Avoid_: stage, state
 
 **Short prelim**:
-A preliminary communication consisting of the region's short-prelim paragraph and any critical findings, issued as the whole report buffer before the full report is written. A flag on the report, not a status; it may coexist with draft.
+A preliminary communication consisting of the region's short-prelim paragraph and any critical findings, issued as the whole report buffer before the full report is written. A property of the report, not a status; it may coexist with draft.
 _Avoid_: SP report, quick report
 
 **Fold-in**:
@@ -170,13 +170,21 @@ The closing snippet recording which clinician the findings were discussed with, 
 The attending's act that makes a report final and locks the buffer against every agent write.
 _Avoid_: finalize, sign (as a status)
 
+**Critical finding**:
+An urgent imaging finding that must reach the clinician promptly — intracranial hemorrhage, acute large-territory infarct, aortic dissection, acute pulmonary embolism, pneumothorax, and their kin. What a short prelim lists and the discussed-with line records. Radiology meaning only.
+_Avoid_: using it for anything the agent raises (that is a flag)
+
+**QA gate**:
+The check the editor runs when the radiologist issues a Prelim or signs off: first deterministic (no pending changes, no unreviewed text, no `___` blanks), then advisory (`/qa` → flags). Never blocks: the radiologist may proceed over open flags, and the override is audited.
+_Avoid_: validation, pre-commit hook, blocker
+
 ## Agent & protocol
 
 **ACP**:
 The Agent Client Protocol (v1) — the JSON-RPC contract between Client and Agent that everything here rides on.
 
 **ACP-Rad profile**:
-The radiology extension of ACP: the namespace, canonical Markdown, clinical verbs, levels, critical findings, audit — carried only in `_meta.rad` and `_rad/*` methods.
+The radiology extension of ACP: the namespace, canonical Markdown, clinical verbs, levels, flags, audit — carried only in `_meta.rad` and `_rad/*` methods.
 _Avoid_: the standard (that comes later), extension
 
 **Bridge**:
@@ -189,9 +197,12 @@ One agent conversation bound to one accession, opened when the editor connects a
 **Focus**:
 Where the radiologist's caret is, sent with a prompt so the agent knows which section is meant.
 
-**Critical finding**:
-An alert the agent raises to the radiologist — a discrepancy or an urgent finding — that changes nothing in the report until acknowledged.
-_Avoid_: alert (the card), warning
+**Flag**:
+What the agent raises when QA finds the report wanting: a kind, a one-line summary, the lines concerned. Rendered as a flag card; changes nothing in the report until the radiologist acknowledges it.
+_Avoid_: critical finding (that is an imaging finding), alert (the card), finding (the section), issue, warning
+
+**Flag kind**:
+Why a flag was raised — `discrepancy` (the report contradicts itself), `omission` (a critical or clinically significant finding missing from the impression), `unsupported` (an impression item with no basis in the findings), `critical_uncommunicated` (a critical finding with no record of communication). The only four; style has no kind.
 
 **PHI boundary**:
 The declared class of data an agent may see; this PoC is `research_synthetic` — no real patient data, ever.

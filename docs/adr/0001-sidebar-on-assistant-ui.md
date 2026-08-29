@@ -23,7 +23,7 @@ Every assistant-ui type is confined to `apps/editor/src/sidebar/convert.ts` (ACP
 
 - Interaction model B puts the permission decision **in the report**; the sidebar only mirrors it. assistant-ui allows exactly that: a tool-call part carries `approval` as data, and omitting `onRespondToToolApproval` leaves it no decision path. Its approval option kinds are ACP's (`allow-once` / `reject-once` …).
 - Streaming, cancel (`Stop` → `session/cancel`), status machinery (running / requires-action / complete), composer and autoscroll fall out of the store shape we already have. Vite + React 19 + TS 6 build clean; ≈ +80 kB gzip, one direct dependency.
-- The registry kit would drag shadcn into `apps/editor` for cards we must write ourselves anyway (diff path + mirrored decision, clinical verbs, QA alert).
+- The registry kit would drag shadcn into `apps/editor` for cards we must write ourselves anyway (diff path + mirrored decision, clinical verbs, QA flag).
 
 ## Rejected alternatives
 

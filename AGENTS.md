@@ -8,6 +8,7 @@ PoC: a radiology report editor (QuillJS, browser) hosting an AI agent through th
 - `docs/design/01-system-architecture.md` — C1–C3, key flows, the profile as exercised, invariants.
 - `docs/design/02-surface-architecture.md` — what the radiologist and the agent see: commands, `/` menu, the human gate, lifecycle.
 - `docs/design/03-agentic-architecture.md` — the agent's organs: loop, tools over `fs/*`, the HITL gate split across the boundary.
+- `docs/design/04-skills.md` — the agent's skills (`/impression` · `/compare` · `/proofread`) as prompt expansions: contract, expansion text, guardrails, the boundary with `/qa`.
 - `docs/progress/overview-poc.md` — where we are; update it as slices land.
 - `docs/ideas/acp-rad-protocol-proposal.md` — the profile proposal (draft; deltas listed in design 01 §8). Original one-file draft: `docs/archive/design/acp-rad-poc-spec.md` (§0 survey, §11 ledger).
 - `docs/dev/running.md` — how to run and switch models.

@@ -114,7 +114,7 @@ try {
     clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
     clientInfo: { name: "acp-rad-smoke", version: "0.0.0" },
     _meta: {
-      rad: { profileVersion: "0.1", focusState: true, criticalFindings: true, clinicalPermissionVerbs: true },
+      rad: { profileVersion: "0.1", focusState: true, flags: true, clinicalPermissionVerbs: true },
     },
   });
   say(`[init] agent=${init.agentInfo?.name ?? "?"} _meta=${JSON.stringify(init._meta)}`);

@@ -33,11 +33,11 @@ log = logging.getLogger(__name__)
 RAD_META_KEY = "rad"
 
 #: What this agent implements of the profile. Level = 1 (present, no L2 caps) for now;
-#: ``criticalFindings`` flips to True in slice 5.
+#: ``flags`` flips to True in slice 5.
 AGENT_RAD_CAPS: dict[str, Any] = {
     "profileVersion": PROFILE_VERSION,
     "focusState": False,
-    "criticalFindings": False,
+    "flags": False,
     "codedContent": [],
 }
 
