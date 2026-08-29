@@ -28,6 +28,11 @@ export type ReportStoreDeps = {
   meta: Record<string, unknown>;
   /** Prior reports by accession, canonical Markdown. */
   priors?: Record<string, string>;
+  /**
+   * `/priors/index.md` as authored (`- <accession> · <exam> · <dd/mm/yyyy> · /priors/<acc>/report.md`,
+   * design 04 §4); when absent a bare path list is generated.
+   */
+  priorsIndex?: string;
   /** House templates by id, canonical Markdown. */
   templates?: Record<string, string>;
   /** Quick-text snippets by id, canonical Markdown. */
@@ -75,6 +80,7 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
       case "meta":
         return `${JSON.stringify(deps.meta, null, 2)}\n`;
       case "priorsIndex": {
+        if (deps.priorsIndex !== undefined) return deps.priorsIndex;
         const accs = Object.keys(priors).sort();
         return accs.length === 0
           ? "(no priors)\n"

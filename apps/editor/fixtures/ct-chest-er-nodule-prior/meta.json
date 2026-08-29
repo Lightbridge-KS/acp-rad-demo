@@ -1,0 +1,23 @@
+{
+  "title": "EMERGENCY MDCT SCAN OF THE CHEST",
+  "session": {
+    "accession": "ACC0000012",
+    "modality": "CT",
+    "region": "chest",
+    "protocol": "contrast",
+    "setting": "ER",
+    "reportStatus": "draft",
+    "shortPrelim": false,
+    "phiBoundary": "research_synthetic"
+  },
+  "patient": {
+    "ageBand": "50-59",
+    "sex": "F"
+  },
+  "study": {
+    "template": "ct-chest-er",
+    "doseMgy": 12,
+    "doseMgycm": 420,
+    "date": "30/08/2026"
+  }
+}

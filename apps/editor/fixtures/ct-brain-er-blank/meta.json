@@ -1,8 +1,7 @@
 {
   "title": "EMERGENCY MDCT OF THE BRAIN",
-  "demo": { "start": "impression_empty", "default": true },
   "session": {
-    "accession": "ACC0000001",
+    "accession": "ACC0000002",
     "modality": "CT",
     "region": "brain",
     "protocol": "noncontrast",
@@ -12,13 +11,13 @@
     "phiBoundary": "research_synthetic"
   },
   "patient": {
-    "ageBand": "60-69",
-    "sex": "M"
+    "ageBand": "70-79",
+    "sex": "F"
   },
   "study": {
     "template": "ct-brain-er",
-    "doseMgy": 58,
-    "doseMgycm": 890,
+    "doseMgy": 55,
+    "doseMgycm": 860,
     "date": "30/08/2026"
   }
 }

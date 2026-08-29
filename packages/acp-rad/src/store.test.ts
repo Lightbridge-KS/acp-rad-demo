@@ -148,3 +148,14 @@ describe("report status lock", () => {
     expect(store.read("/worklist/ACC1/sections/impression.md")).toContain("- ...");
   });
 });
+
+describe("priors index", () => {
+  it("serves the authored index verbatim and still lists every prior in the manifest", () => {
+    const index = "**Priors:** same patient.\n- ACC2 · CT chest · 12/06/2025 · /priors/ACC2/report.md\n";
+    const store = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n"), meta: {}, priors: { ACC2: "**T**\n" }, priorsIndex: index });
+    expect(store.read("/priors/index.md")).toBe(index);
+    expect(store.manifest()).toContain("/priors/ACC2/report.md");
+    const generated = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n"), meta: {}, priors: { ACC2: "**T**\n" } });
+    expect(generated.read("/priors/index.md")).toBe("- /priors/ACC2/report.md\n");
+  });
+});

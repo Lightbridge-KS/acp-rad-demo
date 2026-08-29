@@ -19,8 +19,8 @@ const metas = import.meta.glob("../../fixtures/*/meta.json", {
 type CaseMetaJson = {
   title: string;
   session: unknown;
-  /** Demo start state applied at load; the file itself stays the complete, reviewed case. */
-  demo?: { start?: "complete" | "impression_empty" };
+  /** Demo start state applied at load; the file itself stays the complete, reviewed case. `default` marks the case the editor opens without `?case=`. */
+  demo?: { start?: "complete" | "impression_empty"; default?: boolean };
   patient?: Record<string, unknown>;
   study?: Record<string, unknown>;
 };
@@ -43,6 +43,9 @@ export type CaseFixture = {
   reportMarkdown: string;
   /** Prior reports by accession (canonical Markdown). */
   priors: Record<string, string>;
+  /** Hand-written `/priors/index.md` (accession · exam · date per prior); generated when absent. */
+  priorsIndex?: string;
+  demoDefault: boolean;
 };
 
 const idOf = (path: string) => path.replace(/^.*\/([^/]+)\.md$/, "$1");
@@ -65,9 +68,10 @@ export const cases: CaseFixture[] = Object.entries(metas)
     const base = `../../fixtures/${id}/`;
     const priors = Object.fromEntries(
       Object.entries(md)
-        .filter(([p]) => p.startsWith(`${base}priors/`))
+        .filter(([p]) => p.startsWith(`${base}priors/`) && !p.endsWith("/index.md"))
         .map(([p, text]) => [idOf(p), text]),
     );
+    const priorsIndex = md[`${base}priors/index.md`];
     const { session: _s, demo, ...rest } = meta;
     return {
       id,
@@ -76,8 +80,10 @@ export const cases: CaseFixture[] = Object.entries(metas)
       meta: zCaseMeta.parse(rest),
       reportMarkdown: applyStartState(md[`${base}report.md`] ?? "\n", demo?.start),
       priors,
+      ...(priorsIndex !== undefined ? { priorsIndex } : {}),
+      demoDefault: demo?.default === true,
     };
   })
   .sort((a, b) => a.id.localeCompare(b.id));
 
-export const defaultCase: CaseFixture = cases[0]!;
+export const defaultCase: CaseFixture = cases.find((c) => c.demoDefault) ?? cases[0]!;

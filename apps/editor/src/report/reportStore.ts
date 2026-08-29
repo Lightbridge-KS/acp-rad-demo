@@ -13,6 +13,7 @@ export function makeReportStore(quill: Quill, fixture: CaseFixture, reportStatus
     getOps: () => stripOverlays(quill.getContents().ops),
     meta: fixture.meta,
     priors: fixture.priors,
+    ...(fixture.priorsIndex !== undefined ? { priorsIndex: fixture.priorsIndex } : {}),
     templates,
     snippets,
     reportStatus,

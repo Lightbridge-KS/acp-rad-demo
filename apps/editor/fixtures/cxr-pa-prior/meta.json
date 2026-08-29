@@ -1,0 +1,21 @@
+{
+  "title": "CHEST (PA UPRIGHT)",
+  "session": {
+    "accession": "ACC0000021",
+    "modality": "CR",
+    "region": "chest",
+    "protocol": "PA upright",
+    "setting": "OPD",
+    "reportStatus": "draft",
+    "shortPrelim": false,
+    "phiBoundary": "research_synthetic"
+  },
+  "patient": {
+    "ageBand": "40-49",
+    "sex": "M"
+  },
+  "study": {
+    "template": "cxr-pa",
+    "date": "30/08/2026"
+  }
+}
