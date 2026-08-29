@@ -9,7 +9,7 @@ Design: [`../design/acp-rad-poc-spec.md`](../design/acp-rad-poc-spec.md) (build 
 
 ## Milestones
 
-- [x] **1. Tracer bullet** (2026-08-29) — repo bootstrap; editor mounts Quill with one fixture; browser ACP client ⇄ WS bridge ⇄ rad-agent (stdio); `initialize`/`session/new` carry `_meta.rad`; prompt streams into the sidebar. Verified: `just check` green; `just smoke` OK on Ollama `gpt-oss:20b` and hosted `gpt-5`; browser round-trip via Chrome; unknown `?agent=` closes with 4004.
+- [x] **1. Tracer bullet** (2026-08-29, `9d41220`) — repo bootstrap; editor mounts Quill with one fixture; browser ACP client ⇄ WS bridge ⇄ rad-agent (stdio); `initialize`/`session/new` carry `_meta.rad`; prompt streams into the sidebar. Verified: `just check` green; `just smoke` OK on Ollama `gpt-oss:20b` and hosted `gpt-5`; browser round-trip via Chrome; unknown `?agent=` closes with 4004.
 - [ ] **1b. Level 0 spike** (½ day, `_playground/`) — `claude-agent-acp` over the same bridge with a headless client and a temp-dir `report.md`; record the exact `tool_call` / permission shapes in `NOTES.md`.
 - [ ] **2. ReportStore** — Delta⇄Markdown (label-line grammar), virtual namespace + RO rules, `fs/read_text_file` served from Quill; `AcpClientBackend` in the agent; agent reads FINDINGS.
 - [ ] **3. Sign-off** — `edit_file` → diff card → permission card (clinical verbs) → grant (path + expected content) → `fs/write_text_file` → `ai-draft` blot → audit (editor stamps, bridge persists JSONL). Scenario 1.
