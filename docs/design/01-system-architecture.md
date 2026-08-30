@@ -5,7 +5,7 @@ read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridg
 
 # ACP-Rad PoC — System & OOP Architecture
 
-> Source: this repo (as built through slice 4) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 5–7, marked *planned*) · Type: Application
+> Source: this repo (as built through slice 5) + slice-4/5 design sessions 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 6–7, marked *planned*) · Type: Application
 > See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Data Architecture](./05-data-architecture.md) · [ACP wire shape](../protocol/01-acp-shape.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-poc.md`](../progress/overview-poc.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
 
 ## 1. Overview
@@ -32,7 +32,7 @@ flowchart LR
     subgraph PoC["ACP-Rad PoC (localhost)"]
         editor["apps/editor — browser, the ACP Client"]
         bridge["apps/bridge — WS ⇄ stdio"]
-        agent["agents/rad-agent — the ACP Agent (Level 1)"]
+        agent["agents/rad-agent — the ACP Agent (Level 2)"]
     end
     l0["Level 0 agents (stretch): claude-agent-acp · gemini --experimental-acp"]
     llm[("LLM provider: Ollama · OpenAI · Anthropic")]
@@ -80,7 +80,7 @@ flowchart TD
 | `apps/editor/src/commands/` | One command registry feeding `Commands ▾`, the in-report `/` menu and the composer `/`; deterministic editor commands (document · snippet). See [surface §2](./02-surface-architecture.md#2-surface-map). |
 | `packages/acp-rad/src/` | `schema.ts` (zod for `_meta.rad`, statuses, clinical verbs, write outcome, audit record, error codes) · `markdown.ts` (Delta ⇄ canonical Markdown) · `sections.ts` (label-line partition) · `namespace.ts` (virtual paths, RO rules, manifest) · `store.ts` (`createReportStore`) · `hunks.ts` (line diff, `buildHunks`/`applyHunks`). Framework-free; the seed of the standard's reference implementation. |
 | `apps/bridge/` | `src/index.ts`: `GET /acp?agent=<id>` spawns `agents.json[id]`, re-frames NDJSON ⇄ WS frames, intercepts only editor-originated `_rad/audit` → `audit/{acc}.jsonl`; `BRIDGE_TRACE=1`. `scripts/smoke.ts`: headless live tracer. |
-| `agents/rad-agent/src/rad_agent/` | `server.py` (`RadReportAgentServer`) · `permissions.py` (`PermissionRewritingClient`) · `backend.py` (`AcpClientBackend`) · `agent.py` (`build_agent` → `create_deep_agent`) · `config.py` (`RAD_MODEL`) · `prompts/system.md` · `main.py`. stdout is the wire; logs to stderr. |
+| `agents/rad-agent/src/rad_agent/` | `server.py` (`RadReportAgentServer`) · `permissions.py` (`PermissionRewritingClient`) · `backend.py` (`AcpClientBackend`) · `flags.py` (`raise_flag` tool → `_rad/flag`) · `skills.py` · `agent.py` (`build_agent` → `create_deep_agent`) · `config.py` (`RAD_MODEL`) · `prompts/system.md`, `prompts/skills/*.md` · `main.py`. stdout is the wire; logs to stderr. |
 
 ## 4. Components (C3) — inside `apps/editor`
 
@@ -203,9 +203,25 @@ Editor commands never touch the agent; they share the overlay machinery of §6.1
 
 Editor sends `session/cancel`; `ProposalStore.cancelAll()` discards rendered hunks and answers every in-flight `request_permission` with `cancelled` (ACP contract); the agent returns `stopReason: cancelled`. The interrupted turn shows a *stopped* marker (slice 4).
 
-### 6.4 QA flag (Level 2 method, *planned* slice 5)
+### 6.4 QA flag (Level 2 method, built slice 5)
 
-Agent tool `raise_flag(kind, summary, locations)` → `_rad/flag` request → editor flag card (the one decision the sidebar owns) → `{outcome: "acknowledged"}` → audit `flag.raised` / `flag.acknowledged`. No edit is made. Kinds: `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` (design 04 §3.5). The same path serves the QA gate at Prelim / Sign off (slice 6): the editor sends `/qa` and counts the flags; the agent never knows it is a gate.
+```mermaid
+sequenceDiagram
+    participant R as Radiologist
+    participant E as Editor (Client)
+    participant A as rad-agent
+    R->>E: /qa
+    E->>A: session/prompt "/qa" (expanded agent-side)
+    A->>E: fs/read_text_file report.md · sections/*.md (numbered lines)
+    A->>E: _rad/flag {kind, summary, locations[{path, line}]}
+    E->>E: FlagStore.raise → f{n} · mark the line (ai-flag) · audit flag.raised
+    E-->>A: {outcome: "acknowledged"}  (the Client acknowledges on receipt)
+    A-->>E: "1 flag(s) raised" · stopReason end_turn
+    R->>E: Acknowledge (flag card, sidebar)
+    E->>E: clear the mark · audit flag.acknowledged
+```
+
+The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `Literal` kinds) sends `_rad/flag`; the editor records it in the `FlagStore`, marks the located line, answers `acknowledged` **on receipt** (KS, 2026-08-30 — the turn never waits for a human; nothing is in flight on Stop), and renders a **flag card** in the sidebar — the one decision the sidebar owns. The radiologist's **Acknowledge** is local: it clears the mark and audits `flag.acknowledged`. No edit is ever made. `locations[].line` is the 1-based line of the file *as the agent read it*; the editor re-anchors it by an ordinal walk that counts like `canonicalLines`, then verifies the text (grant base text while a grant is open). Kinds: `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` (design 04 §3.5). The same path serves the QA gate at Prelim / Sign off (slice 6): the editor sends `/qa` and counts the flags; the agent never knows it is a gate.
 
 ## 7. Extension Points
 
@@ -231,6 +247,7 @@ Agent tool `raise_flag(kind, summary, locations)` → `_rad/flag` request → ed
 | `_rad/section_patch` (§8.3) | **Dropped** — per-section files make `edit_file` field-precise; v1 has no custom content types. Codes may ride in `_meta.rad.codes`. |
 | `_rad/focus_state` (§8.1) | Focus carried in `session/prompt._meta.rad.focus` (turn-based agent); the stream stays OPTIONAL for proactive agents. |
 | Write outcome | `WriteTextFileResponse._meta.rad = {outcome: applied \| partial, accepted, discarded}` — new in the PoC. |
+| `_rad/flag` (§8.2) | Agent → Client request `{sessionId, kind, summary ≤ 500, locations[{path, line?}]}`; response `{outcome: "acknowledged"}` means **the Client received and marked it** — `dismissed` and the human-on-the-wire acknowledgement are dropped (KS, 2026-08-30). `line` = 1-based line of the file as the agent read it. Requires `flags` both ways; the agent advertises `/qa` only to a client that negotiated it. |
 | Errors (§10) | `-32003` forbidden (RO/final) · `-32004` not found · `-32010` proposal rejected · `-32011` canonicalization conflict. |
 | Audit (§9.2) | Stamped by the Client, persisted by the bridge as JSONL; never trusted from the agent. |
 | Proposal-doc fixes pending | grammar → label-lines; drop §8.3; status enum; "Flutter Quill" → QuillJS; `ramaai-dev` → `radrama-ai`. |

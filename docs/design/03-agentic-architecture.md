@@ -94,7 +94,7 @@ sequenceDiagram
 | Read-only zones | `FilesystemPermission(operations=["write"], paths=["/priors/**", "/templates/**", "/snippets/**"], mode="deny")` — defense in depth; the editor refuses them too (`-32003`) | authored config | ✅ |
 | Skills (`/impression`, `/compare`, `/proofread`) | `RadReportAgentServer` sends `available_commands_update` after `session/new` and expands the command text at prompt time — one `prompts/skills/<name>.md` per skill, spec in [04-skills](./04-skills.md) | ours | ✅ slice 4 |
 | Skills (deepagents `skills=`, `skills-radreport`) | would load `SKILL.md` folders **through the backend** — needs a `CompositeBackend` route to a local `FilesystemBackend` | authored content | ❌ decided out until slice 5+ |
-| `raise_flag` tool → `_rad/flag` | `server.py` `ext_method` seam | ours | *planned* slice 5 |
+| `raise_flag` tool → `_rad/flag` | `flags.py` `make_raise_flag_tool(conn, session_id)`: `@tool` with pydantic `Literal` kinds, `await conn.ext_method("rad/flag", …)`, returns text for every outcome (a raising tool kills the prompt handler); passed to `create_deep_agent(tools=…)` only when the client negotiated `flags`; `/qa` (`prompts/skills/qa.md`, `requires: flags`) instructs it | ours | ✅ slice 5 |
 | MCP | `session/new.mcpServers: []` | — | ❌ absent, decided: v1 profile rides on `fs/*`; MCP-over-ACP is the v2 path for the `ReportStore` seam |
 
 ## 6. Orchestration & Autonomy
@@ -127,7 +127,7 @@ flowchart LR
 |---|---|
 | a tool | `agent.py`: pass `tools=[…]` to `create_deep_agent`; mark it in `interrupt_on` if it writes |
 | a skill (advertised command) | add `prompts/skills/<name>.md` — `RadReportAgentServer` advertises and expands every file in that folder |
-| a `_rad/*` method | `server.py` `ext_method`/`ext_notification`; schema in `packages/acp-rad/src/schema.ts`; editor `onRequest("_rad/…")` |
+| a `_rad/*` method | incoming: `server.py` `ext_method`/`ext_notification`; outgoing: the connection's `ext_method("rad/…")` from a tool (see `flags.py`); schema in `packages/acp-rad/src/schema.ts`; editor `onRequest("_rad/…", zodSchema, handler)` |
 | a provider | `RAD_MODEL=<provider>:<model>`; OpenAI-compatible endpoints via `RAD_MODEL_BASE_URL` |
 | another agent core | `apps/bridge/agents.json`; Level 0 needs the on-disk mirror + file-watch (slice 7) |
 
@@ -149,7 +149,7 @@ flowchart LR
 | Hooks / scheduling | ❌ | — | reactive only |
 | Permissions / HITL | ✅ | agent `interrupt_on` + `PermissionRewritingClient`; editor `ProposalStore` + grants | guarantee lives in the editor |
 | Session / state / event bus | ✅ | bridge spawn-per-connection; `session_rad`; sidebar reducer; `AuditLog` | one session per process |
-| Flag channel | ⚠️ planned | `_rad/flag` via `ext_method` | slice 5 |
+| Flag channel | ✅ | `flags.py` → connection `ext_method("rad/flag")` | Level 2; kinds closed by the schema |
 
 ## 9. Glossary & Decisions Needed
 

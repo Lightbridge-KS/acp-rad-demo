@@ -1,5 +1,5 @@
 ---
-summary: The shape of the Agent Client Protocol (ACP v1) as this PoC speaks it — peers and transport (browser Client ⇄ WS bridge ⇄ stdio Agent), the full JSON-RPC method surface marked used / unused / pruned, the session lifecycle, every message as actually sent here (`_meta.rad` on initialize · session/new · fs/write response, `session/update` kinds, clinical permission verbs, `_rad/audit`, planned `_rad/flag`), stop reasons, error codes, the SDK quirks the client absorbs — and §9, the M×N → M+N analysis: what the PoC demonstrates about editor ⇄ agent decoupling, what it does not yet, and where the profile itself risks re-creating M×N.
+summary: The shape of the Agent Client Protocol (ACP v1) as this PoC speaks it — peers and transport (browser Client ⇄ WS bridge ⇄ stdio Agent), the full JSON-RPC method surface marked used / unused / pruned, the session lifecycle, every message as actually sent here (`_meta.rad` on initialize · session/new · fs/write response, `session/update` kinds, clinical permission verbs, `_rad/audit`, `_rad/flag`), stop reasons, error codes, the SDK quirks the client absorbs — and §9, the M×N → M+N analysis: what the PoC demonstrates about editor ⇄ agent decoupling, what it does not yet, and where the profile itself risks re-creating M×N.
 read_when: Reading a bridge trace or an audit line and needing to know what a frame is; adding or changing a method, a `_meta.rad` field or a `_rad/*` extension; wiring another ACP agent; checking what vanilla ACP guarantees versus what the profile adds.
 ---
 
@@ -65,7 +65,7 @@ Every method the v1 SDKs know, and what this PoC does with it. "Request" expects
 | Method | Direction | Kind | Here |
 |---|---|---|---|
 | `_rad/audit` | Client → (bridge) | notification | **used** — the bridge persists and drops it; it never reaches the agent (§5.11) |
-| `_rad/flag` | Agent → Client | request | **planned, slice 5** — the QA channel; response `{outcome: "acknowledged"}` (§5.12) |
+| `_rad/flag` | Agent → Client | request | **used** (slice 5) — the QA channel; the Client answers `{outcome: "acknowledged"}` on receipt (§5.12) |
 | `_rad/focus_state` · `_rad/section_patch` | — | — | proposal-only; dropped or replaced in this PoC (design 01 §8) |
 
 Capabilities as advertised: client `{fs: {readTextFile: true, writeTextFile: true}}`; agent (unchanged from `deepagents-acp`) `{loadSession: false, promptCapabilities: {image: true}}`. The profile's own capabilities live entirely in `_meta.rad` (§7).
@@ -246,7 +246,7 @@ Sent by *Stop*. ACP requires every in-flight `session/request_permission` to be 
 
 Sent with `conn.agent.notify(AUDIT_METHOD, record)` on the same connection; the bridge appends `params` as one JSONL line and never forwards the frame. Event catalogue: data architecture §4.3.
 
-### 5.12 `_rad/flag` (Agent → Client, request — planned, slice 5)
+### 5.12 `_rad/flag` (Agent → Client, request)
 
 ```jsonc
 // ← agent
@@ -257,7 +257,7 @@ Sent with `conn.agent.notify(AUDIT_METHOD, record)` on the same connection; the 
 { "outcome": "acknowledged" }
 ```
 
-`kind ∈ {discrepancy, omission, unsupported, critical_uncommunicated}` — the schema, not the prompt, keeps style nits out (design 04 §3.5). A request rather than a notification so the acknowledgment is itself auditable. Wiring: `zFlag` in `packages/acp-rad`, `ext_method` / an outgoing request in `server.py`, and on the client the TS SDK's generic overload `onRequest<Params, Response>(method: string, paramsParser, handler)` — verified present in `@agentclientprotocol/sdk` 1.4.0 (`dist/acp.d.ts`), so `_rad/flag` needs no SDK change.
+`kind ∈ {discrepancy, omission, unsupported, critical_uncommunicated}` — the schema, not the prompt, keeps style nits out (design 04 §3.5). `line` is the 1-based line of the file at `path` **as the agent read it**; the Client re-anchors it to its own buffer. A request rather than a notification so the Client's receipt is itself auditable; **`acknowledged` means the Client holds the flag and has marked the line** (KS, 2026-08-30) — the radiologist's acknowledgement is a local act (audit `flag.acknowledged`), and the proposal's `dismissed` is dropped. Wiring: `zFlagParams` in `packages/acp-rad`; agent side `flags.py` sends through the Python SDK's `AgentSideConnection.ext_method("rad/flag", params)` (which prepends the `_` and returns the raw result dict); client side the TS SDK's generic overload `onRequest("_rad/flag", zFlagParams, handler)` — no SDK change on either side.
 
 ## 6. Errors and stop reasons
 
@@ -281,7 +281,7 @@ Sent with `conn.agent.notify(AUDIT_METHOD, record)` on the same connection; the 
 | `_meta.rad` | `session/prompt.params` | `focus` — declared, not sent |
 | `_meta.rad` | `fs/write_text_file.result` | write outcome (`RadWriteOutcome`) — new in the PoC, not in the proposal draft |
 | `_rad/audit` | notification, client → bridge | `AuditRecord` |
-| `_rad/flag` | request, agent → client | `Flag` (planned) |
+| `_rad/flag` | request, agent → client | `FlagParams` → `{outcome: "acknowledged"}` (Level 2; advertised `/qa` only when the client negotiated `flags`) |
 | conventions | `cwd`, `Diff.path`, `fs/*` paths | always virtual (`/worklist/…`, `/priors/…`, `/templates/…`, `/snippets/…`); no real filesystem |
 | permission options | `session/request_permission.options` | the three clinical verbs; never `*_always` for writes |
 | pruned | `terminal/*`, `mcpServers` | not advertised / empty |
@@ -299,7 +299,8 @@ Everything above is enforced on the **client** side — the agent-side pieces (`
 - **Level 0 hygiene** — `session/set_mode: default` when a registry agent reports another mode; `allow_always` filtered client-side regardless.
 - **StrictMode** — dev mounts twice, so two agents spawn per page load and the first connection is closed immediately.
 - **`EditResult` cannot carry `_meta`** — the model cannot see `partial`; v0.2 candidate: a `_rad/` notification.
-- **Custom methods on the TS SDK** — `onRequest(method: string, paramsParser, handler)` exists; `_rad/flag` can be registered without touching the SDK.
+- **Custom methods on the TS SDK** — `onRequest(method: string, paramsParser, handler)` exists; `_rad/flag` is registered without touching the SDK.
+- **Outgoing extension requests on the Python SDK** — `AgentSideConnection` has no `send_request`; use `ext_method(name, params)` (prepends `_`, returns the raw result dict, raises `RequestError` on an error response, `ConnectionError` on a dropped pipe). A tool that *raises* escapes the LangGraph loop and kills the `session/prompt` handler — `raise_flag` returns every failure as text; a pydantic validation error on its args becomes an error `ToolMessage` the model reads.
 
 ## 9. M×N → M+N — what the PoC demonstrates
 

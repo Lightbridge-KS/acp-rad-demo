@@ -198,7 +198,7 @@ One agent conversation bound to one accession, opened when the editor connects a
 Where the radiologist's caret is, sent with a prompt so the agent knows which section is meant.
 
 **Flag**:
-What the agent raises when QA finds the report wanting: a kind, a one-line summary, the lines concerned. Rendered as a flag card; changes nothing in the report until the radiologist acknowledges it.
+What the agent raises when QA finds the report wanting: a kind, a one-line summary, the lines concerned. Rendered as a flag card with the line marked; changes nothing in the report. On the wire the Client acknowledges *receipt*; the radiologist acknowledges the *card*, which clears the mark.
 _Avoid_: critical finding (that is an imaging finding), alert (the card), finding (the section), issue, warning
 
 **Flag kind**:

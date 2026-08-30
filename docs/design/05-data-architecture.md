@@ -66,6 +66,7 @@ flowchart LR
 | **Quill Delta** (`quill.getContents().ops`) | in-memory document, browser | the report buffer: text, block attrs (`list`), inline attrs (`bold`, `italic`), overlay attrs (`ai-insert`, `ai-delete`, `ai-unreviewed`) | radiologist typing (`source: user`); editor `applyOps` for overlays, decisions, editor commands | `ReportStore` (through `stripOverlays`), `HunkControls`, `SlashMenu`, `caretInfo` | page load |
 | `ReportStore` | stateless view | nothing — resolves virtual paths to live content | — | `connection.ts` (`fs/*`), editor commands | — |
 | `ProposalStore` | in-memory, browser | `Proposal` (hunks, per-hunk states, options), `Grant` by path, permission waiters | `connection.ts`, `App.tsx`, `commands/apply.ts` | `App.tsx`, `HunkControls`, `connection.ts` | page load; a grant ≤ 60 s or first write |
+| `FlagStore` (`report/flags.ts`) | in-memory, browser | `Flag {id, kind, summary, locations, state: open \| acknowledged, raisedAt}`; the mark `ai-flag` = id on the buffer line | `connection.ts` `onFlag` → `App.tsx` `raiseFlag`; `acknowledgeFlag` | sidebar flag cards, header count, (slice 6) the QA gate | page load; **never** cancelled by the agent |
 | Sidebar state (`SidebarState`) | in-memory reducer, browser | transcript messages, tool calls with a *mirror* of each permission outcome, plan, advertised skills, unknown update kinds | reducer over `session/update` + editor dispatches | `Sidebar.tsx` via `convert.ts` | page load; `reset` on reconnect |
 | `AuditLog.records` | in-memory array, browser | every `AuditRecord` of this page load | `audit.record(…)` | Sidebar *Audit* tab | page load |
 | `audit/{accession}.jsonl` | append-only file on the bridge host | one `AuditRecord` per line, one file per accession, across sessions and page loads | bridge `persistAudit` | humans (`tail`, `jq`); nothing in-app | forever; gitignored (`audit/`) |
@@ -94,7 +95,7 @@ erDiagram
     PROPOSAL ||--|{ HUNK : "decided one by one"
     PROPOSAL ||--o| GRANT : "when any hunk is accepted"
     SESSION ||--o{ AUDIT_RECORD : "client stamps"
-    SESSION ||--o{ FLAG : "planned, slice 5"
+    SESSION ||--o{ FLAG : "agent raises, radiologist acknowledges"
 ```
 
 **Accession** is the join key of the whole system: it names the namespace root (`/worklist/{acc}`), binds the session (`session/new._meta.rad.accession`), stamps every audit record and names the audit file.
@@ -112,6 +113,8 @@ All wire shapes are zod schemas in `packages/acp-rad/src/schema.ts`; editor-only
 | `Focus` / `RadPromptMeta` | `{focus?: {section, cursorOffset, selection}}` | — | declared for `session/prompt._meta.rad`; **not sent yet** (`connection.ts` prompts without `_meta`) |
 | `RadWriteOutcome` | `{outcome: applied \| partial, toolCallId?, accepted?[], discarded?[]}` | `toolCallId` | `fs/write_text_file` response `_meta.rad` |
 | `AuditRecord` | `{ts, sessionId, accession, actor{userId, role}, agent{name, version?, level}, event, path?, toolCallId?, hunkId?, argsHash?, outcome?}` | `(accession, ts)` | `_rad/audit` params → one JSONL line |
+| `FlagParams` / `FlagLocation` | `{sessionId, kind: discrepancy \| omission \| unsupported \| critical_uncommunicated, summary (1–500), locations[{path, line?}]}` — `line` = 1-based line of the file as the agent read it | — | `_rad/flag` request; response `{outcome: "acknowledged"}` |
+| `Flag` (`report/flags.ts`) | `{id, kind, summary, locations, state: open \| acknowledged, raisedAt, acknowledgedAt?}` | `id` = `f{n}` (client-minted) | `FlagStore`; `ai-flag` attr value on the marked line |
 | `Hunk` (`hunks.ts`) | `{id, oldLines[], newLines[], contextBefore?}` | `id` = `p{n}-h{k}` | inside a `Proposal`; overlay attr values key on it |
 | `Proposal` (`report/proposals.ts`) | `{toolCallId, origin: agent \| local, local?{command, folded?}, path, section, hunks[], baseText, states{hunkId → pending \| conflict \| accept \| accept_edit \| reject}, state: pending \| decided \| applied \| partial \| cancelled, options?, answered?, createdAt}` | `toolCallId` | `ProposalStore.proposals` |
 | `Grant` | `{toolCallId, path, expected, baseText, accepted[], discarded[], createdAt}` | `path` — one open grant per path | `ProposalStore.grants`, TTL `GRANT_TTL_MS = 60 000` |
@@ -249,7 +252,7 @@ Where the bytes end up: the bullet exists in the Quill Delta because the radiolo
 
 `audit.record(event, fields)` → stamped with the bound context (`sessionId`, `accession`, actor stub `{userId: "demo-radiologist", role: "radiologist"}`, `agent{name, version, level}`) → pushed to `records` (the sidebar's *Audit* tab) → `conn.agent.notify("_rad/audit", record)` → WebSocket frame → bridge `ws.on("message")`: `text.includes("_rad/audit") && persistAudit(text)` → `appendFileSync(audit/{accession}.jsonl)` and **the frame is dropped** — it never reaches the agent. Records made before `bind` (an editor command run while connecting) are queued and flushed with their original `ts`. Persistence is best-effort: a sink failure is swallowed and the in-memory record remains the page's truth.
 
-Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session.new` · `session.set_mode` · `session.cancel` · `fs.read` (outcome `base-while-granted` when a grant is open) · `fs.write.applied` · `fs.write.partial` · `fs.write.refused` · `fs.write.rejected` · `fs.write.unsolicited` · `proposal.received` · `permission.request` · `permission.accept` · `permission.accept_edit` · `permission.reject` · `permission.cancelled` · `permission.unmatched` · `hunk.accept` · `hunk.accept_edit` · `hunk.reject` · `review.cleared` · `command.<id>` (outcome `skill` · `instant` · `already present` · `proposal · n hunks`) · `short_prelim.folded`. Planned (slice 5–6): `flag.raised` · `flag.acknowledged` · `qa.passed` · `qa.overridden` · `qa.skipped`.
+Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session.new` · `session.set_mode` · `session.cancel` · `fs.read` (outcome `base-while-granted` when a grant is open) · `fs.write.applied` · `fs.write.partial` · `fs.write.refused` · `fs.write.rejected` · `fs.write.unsolicited` · `proposal.received` · `permission.request` · `permission.accept` · `permission.accept_edit` · `permission.reject` · `permission.cancelled` · `permission.unmatched` · `hunk.accept` · `hunk.accept_edit` · `hunk.reject` · `review.cleared` · `command.<id>` (outcome `skill` · `instant` · `already present` · `proposal · n hunks`) · `short_prelim.folded`. Slice 5: `flag.raised` (`flagId`, `path`, outcome = kind, or `kind · line not found`) · `flag.acknowledged` (`flagId`). Planned (slice 6): `qa.passed` · `qa.overridden` · `qa.skipped`.
 
 ### 4.4 Third lineage — an editor command (no agent, no wire)
 
@@ -269,7 +272,7 @@ Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session
 | Grant | `ProposalStore.grants` keyed by **path** | — | `answer()` on the first accepted hunk | `fs/read` (read-through), `fs/write` (`takeGrant`, single use) | ⚠ One open grant per path — see §8. |
 | Advertised skills | `prompts/skills/*.md` (agent) | sidebar `commands[]` via `available_commands_update` | humans | command menus | — |
 | **Audit trail** | ⚠ two: `AuditLog.records` (page) and `audit/{accession}.jsonl` (durable) | — | `audit.record` · bridge append | *Audit* tab · humans | The JSONL is the durable record but nothing confirms delivery; the in-memory copy dies with the page. One file per accession accumulates across sessions (e.g. 172 lines for `ACC0000001` today) — `sessionId` separates them. |
-| Flags (slice 5) | to be decided — "the one decision the sidebar owns" (design 01 §6.4) | — | — | — | §8. |
+| **Flags** | `FlagStore` | the `ai-flag` mark on the line (rendering; moves with the line, gone with it); sidebar cards | `_rad/flag` via `connection.ts` → `raiseFlag`; radiologist **Acknowledge** | cards, header count, audit; (slice 6) the QA gate | The line anchor is re-derived on arrival by an ordinal walk over the buffer that counts like `canonicalLines`, verified by text, against the text the agent actually read (`peekGrant(path)?.baseText ?? store.read(path)`). An unlocatable line ⇒ card only, audited `line not found`. |
 
 ## 6. Storage & Access
 
@@ -315,5 +318,5 @@ Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session
 - **Grant keyed by path.** A second agent proposal on the same path, decided before the first write lands, overwrites the first grant (`grants.set(p.path, …)`). Not observed live — the agent writes within milliseconds of approval — but untested; worth a unit test before slice 6 adds parallel skills.
 - **Agent-side `reportStatus` snapshot.** Frozen at `session/new`; once status changes live (slice 6) the editor lock is authoritative, but the agent may keep proposing edits to a final report. A `session_info_update` or a `_rad/` notification could inform it — v0.2 candidate.
 - **Focus.** `Focus` / `zRadPromptMeta` are declared but `session/prompt._meta.rad.focus` is never sent (`connection.ts`). Planned use per design 03 §4.
-- **Flag store (slice 5).** Where acknowledged flags rest (sidebar state vs a `FlagStore` beside `ProposalStore`), who mints the flag id, and whether `locations[]` lines are re-anchored after the radiologist edits (the hunk anchor problem again, INV-2). The `_rad/flag` wire shape is settled (protocol doc §5.12, proposal §8.2).
+- ~~Flag store (slice 5)~~ — resolved: a `FlagStore` beside `ProposalStore` (§2, §5); ids `f{n}` minted by the client; no re-anchoring needed — the mark is a Delta attribute on the line and moves with it (INV-2 by construction).
 - **`-32011` canonicalization conflict** is declared but no code path raises it: today an unfindable anchor becomes a hunk `conflict` and the write lands `partial` instead. Decide whether the error survives into the standard.

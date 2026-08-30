@@ -5,7 +5,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 
 # ACP-Rad PoC — Surface Architecture (UX · AX)
 
-> Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 4) + Design (*planned* = slice 5+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
+> Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 5) + Design (*planned* = slice 6+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)
 
 ## Cheat Sheet
@@ -20,7 +20,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 | Clear amber (unreviewed) text | edit the line, or **Mark all reviewed** |
 | Compare with the prior | `/compare` |
 | Mark attending review | `/er-reviewed` · `/er-not-reviewed` |
-| Check before issuing | `/qa` → flag cards; **Prelim** / **Sign off** run it as the QA gate — *planned* (slices 5–6) |
+| Check before issuing | `/qa` → flag cards + marked lines, Acknowledge in the sidebar (built, slice 5); **Prelim** / **Sign off** run it as the QA gate — *planned* (slice 6) |
 | Stop the agent | **Stop** in the sidebar |
 | See what happened | sidebar **Audit** tab (same records as `audit/{accession}.jsonl`) |
 
@@ -54,13 +54,13 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 |---|---|
 | Report (Quill) | Types freely, always. Bold/italic/lists only. Undo covers own edits only. |
 | Change pill | Decides one change (a hunk): Accept (lands plain) · Accept for review (lands amber) · Reject. |
-| Header counters | Bulk decide pending changes; clear all unreviewed text. |
+| Header counters | Bulk decide pending changes; clear all unreviewed text; open-flag count. |
 | Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions behind the QA gate (04 §3.5); `final` locks writes. |
 | `Commands ▾` (toolbar) | The full command list, grouped. |
 | `/` in the report | Notion-style menu at the caret (`/` at a line start or after whitespace); a typed query becomes one ranked *Matches* list; `/name arg` passes an argument. |
 | Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with a `/` menu of **skills only**; Send / Stop. |
 | Sidebar · Audit | Live audit trail. |
-| Flag card | `_rad/flag` acknowledgement — the one decision the sidebar owns. *planned* (slice 5) |
+| Flag card | Open flags in a strip above the thread (Chat tab): kind badge · summary · `section · line n` · **Acknowledge** — the one decision the sidebar owns; clicking the card scrolls the report to the marked line. The mark (`ai-flag`) lives on the line until acknowledged and moves with it. (built, slice 5) |
 | Worklist | 4 synthetic cases. *planned* (slice 6); until then the `?case=<id>` URL parameter (`ct-brain-er-stroke` default, `ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`). |
 
 ### 2.2 Commands

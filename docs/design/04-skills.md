@@ -5,7 +5,7 @@ read_when: Adding or changing a skill; writing or reviewing a skill's expansion 
 
 # ACP-Rad PoC — Skills
 
-> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slice 4; `/qa` and the QA gate *planned*) · Scope: what the agent does when the radiologist invokes a skill
+> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slices 4–5; the QA gate *planned*, slice 6) · Scope: what the agent does when the radiologist invokes a skill
 > See also: [Surface Architecture](./02-surface-architecture.md) §2.2 (the command registry the skills appear in) · [Agentic Architecture](./03-agentic-architecture.md) §5, §9 (the agent's organs; why deepagents `skills=` is out) · Glossary [`CONTEXT.md`](../../CONTEXT.md)
 
 A **skill** is a command the agent advertises and performs; its result is a proposal. In this PoC a skill is nothing more than **a named prompt expansion** (built in slice 4; `/qa` is the exception, §3.5): the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
@@ -184,14 +184,14 @@ The overlap is deliberate: a proofreader that edits must stay narrow, a gate tha
 
 ### 3.5 `/qa` (slice 5) and the QA gate (slice 6)
 
-`/qa` is the one skill that is **not** a prompt expansion: its output must be countable, so it rides a tool and a profile method instead of prose.
+`/qa` is advertised and expanded like every other skill (`prompts/skills/qa.md`, `requires: flags` — hidden from a client that did not negotiate flags); what differs is what its body instructs: not `edit_file` but the **`raise_flag` tool**, so its output is countable and rides a profile method instead of prose.
 
 | | |
 |---|---|
 | Purpose | Verify the report before it goes out: does it agree with itself, does the IMPRESSION carry what matters, was every critical finding communicated. |
 | Argument | none |
 | Reads | `report.md` |
-| Raises | one `raise_flag(kind, summary, locations)` per issue → `_rad/flag` request → flag card → `{outcome: "acknowledged"}` |
+| Raises | one `raise_flag(kind, summary, locations)` per issue → `_rad/flag` request → flag card + marked line → `{outcome: "acknowledged"}` **from the Client on receipt** (KS, 2026-08-30); the radiologist's Acknowledge is local, audited `flag.acknowledged`. `locations[].line` = the line of the section file as `read_file` numbered it |
 | Never | edits; raises a style nit (there is no kind for it); raises a taste call |
 | Level | requires `flags: true` in the agent's `initialize._meta.rad` (Level 2) |
 
@@ -251,7 +251,7 @@ Rules: the gate is **advisory** — the agent is untrusted and must be unable to
 
 - **A new skill** = one file in `prompts/skills/`. It appears in the next session's advertisement with no code change. The bar: it must be expressible as "read these paths, propose on these sections, never touch those".
 - **Focus** (`_meta.rad.focus` at prompt time) can replace `{arg}` for `/proofread` and scope `/impression` to the caret's section once `focusState` is on.
-- **`/qa`** (slice 5) is not an expansion: it needs the `raise_flag` tool and the `_rad/flag` method (§3.5, 03 §7); the QA gate (slice 6) is editor-side and adds no protocol.
+- **A skill that needs a tool** declares the client capability it depends on in its frontmatter (`requires: flags`) — `/qa` is the model: the expansion instructs `raise_flag`, the agent passes the tool only when the client negotiated the capability, and the advertisement hides the skill otherwise. The QA gate (slice 6) is editor-side and adds no protocol.
 - **deepagents `skills=`** (`skills-radreport`) is the path for skills with reference material larger than a prompt (a per-exam reporting guide); it waits on the `CompositeBackend` decision (03 §9).
 
 ## 7. Decisions needed
