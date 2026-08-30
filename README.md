@@ -89,6 +89,7 @@ just dev                  # bridge on :8787, editor on http://localhost:5173
 Offline, no key, via Ollama:
 
 ```sh
+# gpt-oss:20b
 RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just dev
 ```
 
