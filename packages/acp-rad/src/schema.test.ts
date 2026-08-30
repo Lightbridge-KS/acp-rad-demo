@@ -102,4 +102,14 @@ describe("flags", () => {
     });
     expect(rec.flagId).toBe("f1");
   });
+
+  it("audit records may carry the overridden flagIds and an attending actor", () => {
+    const rec = zAuditRecord.parse({
+      ts: "2026-08-30T00:00:00Z", sessionId: "s", accession: "A",
+      actor: { userId: "u", role: "attending" }, agent: { name: "a", level: 2 },
+      event: "qa.overridden", flagIds: ["f1", "f2"],
+    });
+    expect(rec.flagIds).toEqual(["f1", "f2"]);
+    expect(() => zAuditRecord.parse({ ...rec, actor: { userId: "u", role: "nurse" } })).toThrow();
+  });
 });

@@ -156,7 +156,8 @@ export const zAuditRecord = z.object({
   ts: z.string(),
   sessionId: z.string(),
   accession: z.string(),
-  actor: z.object({ userId: z.string(), role: z.enum(["radiologist", "resident", "system"]) }),
+  /** `radiologist` is the pre-slice-6 default (kept for existing JSONL); the role toggle stamps `resident` / `attending`. */
+  actor: z.object({ userId: z.string(), role: z.enum(["radiologist", "resident", "attending", "system"]) }),
   agent: z.object({ name: z.string(), version: z.string().optional(), level: z.union([z.literal(0), z.literal(1), z.literal(2)]) }),
   /** e.g. "fs.read", "permission.request", "permission.accept_edit", "fs.write.applied", "review.cleared". */
   event: z.string(),
@@ -164,6 +165,8 @@ export const zAuditRecord = z.object({
   toolCallId: z.string().optional(),
   hunkId: z.string().optional(),
   flagId: z.string().optional(),
+  /** The flags a QA-gate override walked past (`qa.overridden`). */
+  flagIds: z.array(z.string()).optional(),
   argsHash: z.string().optional(),
   outcome: z.string().optional(),
 });
