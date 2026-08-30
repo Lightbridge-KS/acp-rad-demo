@@ -85,6 +85,10 @@ export type AgentHandle = {
   close: () => void;
   /** Whether an agent edit would be refused right now — the editor must not render one as a proposal either. */
   refuseReason: () => RefuseReason | null;
+  /** `session/new`'s `configOptions` (the `model` select when the agent offers one); later updates arrive as `config_option_update`. */
+  configOptions: acp.SessionConfigOption[];
+  /** `session/set_config_option`; resolves with the agent's updated options. */
+  setConfigOption: (configId: string, value: string) => Promise<acp.SessionConfigOption[]>;
 };
 
 /** Run a ReportStore operation, translating profile errors to JSON-RPC errors on the wire. */
@@ -270,5 +274,11 @@ export async function connectAgent(
     },
     close: () => conn.close(),
     refuseReason,
+    configOptions: created.configOptions ?? [],
+    setConfigOption: async (configId, value) => {
+      const res = await conn.agent.request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value });
+      audit.record("session.config", { outcome: `${configId}=${value}` });
+      return res.configOptions;
+    },
   };
 }

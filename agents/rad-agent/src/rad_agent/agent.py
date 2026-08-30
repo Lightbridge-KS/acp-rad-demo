@@ -54,8 +54,9 @@ def build_agent(
         "changes and may accept only part of it — re-read the section before building on an "
         "edit, and never claim an edit is in the report until you have read it back."
     )
+    # `context.model` is the session's choice (`session/set_config_option`), else the default.
     return create_deep_agent(
-        model=resolve_model(),
+        model=resolve_model(context.model),
         tools=list(tools),
         system_prompt=SYSTEM_PROMPT + files_note,
         backend=backend,

@@ -35,20 +35,23 @@ Agent logs go to **stderr** (shown in the bridge's terminal); stdout is the JSON
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `RAD_MODEL` | `openai:gpt-5.6-terra` | LangChain provider string (`openai:…`, `anthropic:…`) |
-| `RAD_MODEL_BASE_URL` | unset | If set, uses `ChatOpenAI(base_url=…)` — any OpenAI-compatible endpoint (Ollama: `http://localhost:11434/v1`) |
+| `RAD_MODELS` | unset | Comma-separated LangChain provider strings the session can **switch between in the app** (the model select in the sidebar header); the first is the default |
+| `RAD_MODEL` | `openai:gpt-5.6-terra` | A single provider string (`openai:…`, `anthropic:…`); used when `RAD_MODELS` is unset |
+| `RAD_MODEL_BASE_URL` | unset | If set, uses `ChatOpenAI(base_url=…)` — any OpenAI-compatible endpoint (Ollama: `http://localhost:11434/v1`). Global: every entry of `RAD_MODELS` then goes to that endpoint, so a list mixes hosted models *or* Ollama models, not both |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | — | Provider keys; falls back to `ollama` when a base URL is set |
 | `RAD_LOG_LEVEL` | `INFO` | Python logging level (stderr) |
 
-Keys never live in the repo. Inject personal keys per run:
+Keys never live in the repo. Put them in a **`.env` at the repo root** (gitignored; `cp .env.example .env` and fill in what you use) — the agent reads it at start through `python-dotenv`, so `just dev` and `just smoke` need no shell setup. Plain environment variables work too and override the file:
 
 ```sh
-lb key run openai-personal -- just dev
-lb key run anthropic-personal -- env RAD_MODEL=anthropic:claude-sonnet-5 just dev
-RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just dev   # offline, Ollama
+just dev                                                                    # keys + model from .env
+RAD_MODEL=anthropic:claude-sonnet-5 just dev                                # one model
+RAD_MODELS=openai:gpt-5.6-terra,anthropic:claude-sonnet-5 just dev          # switchable in the app
+RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just dev   # offline, Ollama, no key
 ```
 
-A `.env` in `agents/rad-agent/` is also read (`python-dotenv`), gitignored.
+**Switching in the app** is plain ACP: the agent advertises a `model` select in `session/new`'s `configOptions` (always, even with one entry), the sidebar header renders it, and a change sends `session/set_config_option` — the agent rebuilds its graph for that session (its chat memory starts over; the transcript in the sidebar stays). The choice is per session: a worklist switch or a reload returns to the default. Audited as `session.config → model=<spec>`.
+
 
 ## Gates
 

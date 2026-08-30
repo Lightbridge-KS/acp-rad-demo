@@ -210,6 +210,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
     connectAgent(BRIDGE_URL, fixture.session, store, proposals, audit, {
       onUpdate: (u) => {
         dispatch({ type: "update", update: u });
+        if (u.sessionUpdate === "config_option_update") setHeader((h) => ({ ...h, configOptions: u.configOptions }));
         // A diff on an edit tool call becomes a proposal the moment it arrives (before the permission
         // request) — unless the editor will refuse the write anyway (final report, /qa turn): then
         // nothing is rendered and `request_permission` answers reject (connection.ts).
@@ -248,7 +249,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
           return;
         }
         agentRef.current = handle;
-        setHeader({ status: "ready", agentName: handle.agentName, level: handle.level, model: handle.model });
+        setHeader({ status: "ready", agentName: handle.agentName, level: handle.level, model: handle.model, configOptions: handle.configOptions });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -280,6 +281,16 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
             },
             cancel: async () => {
               await agentRef.current?.cancel();
+            },
+            setConfigOption: async (configId, value) => {
+              const agent = agentRef.current;
+              if (!agent) return;
+              try {
+                const configOptions = await agent.setConfigOption(configId, value);
+                setHeader((h) => ({ ...h, configOptions }));
+              } catch (err) {
+                setHeader((h) => ({ ...h, error: err instanceof Error ? err.message : String(err) }));
+              }
             },
           }
         : null,

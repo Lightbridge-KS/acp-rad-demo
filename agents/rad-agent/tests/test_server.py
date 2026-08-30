@@ -63,6 +63,7 @@ async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
         captured["backend"] = backend
         captured["accession"] = accession
         captured["tools"] = list(tools)
+        captured["model"] = context.model
         return object()  # stands in for the compiled graph
 
     monkeypatch.setattr(server_mod, "build_agent", fake_build_agent)
@@ -83,6 +84,47 @@ async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
     server.client_rad_caps = {"profileVersion": "0.1", "flags": True}
     server._reset_agent(created.session_id)
     assert [t.name for t in captured["tools"]] == ["raise_flag"]  # type: ignore[union-attr]
+
+
+async def test_new_session_advertises_the_model_select_and_set_config_option_switches(
+    monkeypatch,
+) -> None:
+    """Plain ACP: `configOptions` on session/new; `set_config_option` rebuilds the graph."""
+    import rad_agent.server as server_mod
+
+    # Read when the server is constructed.
+    monkeypatch.setenv("RAD_MODELS", "openai:one,anthropic:two")
+    captured: dict[str, object] = {}
+
+    def fake_build_agent(context, *, backend, accession, tools=()):
+        captured["model"] = context.model
+        return object()
+
+    monkeypatch.setattr(server_mod, "build_agent", fake_build_agent)
+    server = _server()
+    server._conn = object()  # type: ignore[assignment]
+    created = await server.new_session(
+        "/worklist/ACC1", mcp_servers=[], rad={"accession": "ACC1", "manifest": []}
+    )
+    options = [getattr(o, "root", o) for o in created.config_options or []]
+    model = next(o for o in options if o.id == "model")
+    assert model.current_value == "openai:one"
+    assert [opt.value for opt in model.options] == ["openai:one", "anthropic:two"]
+
+    server._reset_agent(created.session_id)
+    assert captured["model"] == "openai:one"
+
+    response = await server.set_config_option(
+        config_id="model", session_id=created.session_id, value="anthropic:two"
+    )
+    assert captured["model"] == "anthropic:two"
+    after = [getattr(o, "root", o) for o in response.config_options]
+    assert next(o for o in after if o.id == "model").current_value == "anthropic:two"
+
+    with pytest.raises(RequestError):
+        await server.set_config_option(
+            config_id="model", session_id=created.session_id, value="nope:model"
+        )
 
 
 def test_agent_is_level_2() -> None:

@@ -9,13 +9,14 @@ import { useReducer } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Command, CommandGroups } from "../commands/registry.ts";
 import type { Flag } from "../report/flags.ts";
-import { Sidebar, type AgentPort } from "./Sidebar.tsx";
+import { Sidebar, type AgentPort, type HeaderState } from "./Sidebar.tsx";
 import { initialSidebarState, sidebarReducer, type SidebarAction } from "./store.ts";
 
 let dispatchRef: ((a: SidebarAction) => void) | null = null;
 
 type HarnessProps = {
   agent: AgentPort;
+  header?: HeaderState;
   commands?: () => CommandGroups;
   onCommand?: (c: Command) => void;
   flags?: Flag[];
@@ -23,14 +24,14 @@ type HarnessProps = {
   onLocate?: (id: string) => void;
 };
 
-function Harness({ agent, commands, onCommand, flags, onAcknowledge, onLocate }: HarnessProps) {
+function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onLocate }: HarnessProps) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   dispatchRef = dispatch;
   return (
     <Sidebar
       state={state}
       dispatch={dispatch}
-      header={{ status: "ready", agentName: "rad-report-agent", level: 1, model: "gpt-5" }}
+      header={header ?? { status: "ready", agentName: "rad-report-agent", level: 1, model: "gpt-5" }}
       agent={agent}
       audit={[]}
       commands={commands}
@@ -45,8 +46,38 @@ function Harness({ agent, commands, onCommand, flags, onAcknowledge, onLocate }:
 const update = (u: unknown) => act(() => dispatchRef!({ type: "update", update: u as never }));
 
 describe("Sidebar", () => {
+  it("renders the model select from the session's configOptions and sends the choice through the port", () => {
+    const setConfigOption = vi.fn(async () => {});
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption };
+    const header: HeaderState = {
+      status: "ready",
+      agentName: "rad-report-agent",
+      level: 2,
+      model: "openai:stale",
+      configOptions: [
+        {
+          id: "model",
+          name: "Model",
+          type: "select",
+          currentValue: "openai:a",
+          options: [
+            { value: "openai:a", name: "openai:a" },
+            { value: "anthropic:b", name: "anthropic:b" },
+          ],
+        },
+      ],
+    };
+    render(<Harness agent={agent} header={header} />);
+    const select = screen.getByTestId("model-select") as HTMLSelectElement;
+    expect(select.value).toBe("openai:a");
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(["openai:a", "anthropic:b"]);
+    expect(screen.queryByText("· openai:stale")).toBeNull();
+    fireEvent.change(select, { target: { value: "anthropic:b" } });
+    expect(setConfigOption).toHaveBeenCalledWith("model", "anthropic:b");
+  });
+
   it("streams text, mirrors tool cards and an externally resolved permission", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
 
     act(() => dispatchRef!({ type: "user", text: "Draft the impression" }));
@@ -92,7 +123,7 @@ describe("Sidebar", () => {
   });
 
   it("composer sends through the AgentPort and Stop cancels", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
     const input = screen.getByPlaceholderText(/Ask the agent/);
     fireEvent.change(input, { target: { value: "hello" } });
@@ -107,7 +138,7 @@ describe("Sidebar", () => {
   });
 
   it("marks a cancelled turn as stopped until the next prompt", () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
     act(() => dispatchRef!({ type: "user", text: "/impression" }));
     update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Reading…" } });
@@ -118,7 +149,7 @@ describe("Sidebar", () => {
   });
 
   it("shows open flags as cards and owns the Acknowledge decision; a raise_flag tool card reads 'flag'", () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
     const onAcknowledge = vi.fn();
     const onLocate = vi.fn();
     const flags: Flag[] = [
@@ -143,7 +174,7 @@ describe("Sidebar", () => {
   });
 
   it("composer / lists skills only and runs the picked one — editor commands are not chat", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
     const onCommand = vi.fn();
     const groups: CommandGroups = {
       suggested: [],

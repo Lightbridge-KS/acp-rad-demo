@@ -36,7 +36,7 @@ from langgraph.graph.state import CompiledStateGraph
 from rad_agent import AGENT_NAME, PROFILE_VERSION
 from rad_agent.agent import build_agent
 from rad_agent.backend import AcpClientBackend
-from rad_agent.config import model_spec
+from rad_agent.config import model_options, model_spec
 from rad_agent.flags import make_raise_flag_tool
 from rad_agent.permissions import PermissionRewritingClient
 from rad_agent.skills import Skill, advertise, expand, load_skills
@@ -80,7 +80,10 @@ class RadReportAgentServer(AgentServerACP):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(agent=self._build_agent, **kwargs)
+        # `models=` makes deepagents-acp advertise a `model` select in `session/new`'s
+        # configOptions and honour `session/set_config_option` (rebuilding the graph with
+        # `context.model`) — the provider switch is plain ACP, nothing profile-specific.
+        super().__init__(agent=self._build_agent, models=model_options(), **kwargs)
         self.session_rad: dict[str, dict[str, Any]] = {}
         self.client_rad_caps: dict[str, Any] | None = None
         self._current_session_id: str | None = None

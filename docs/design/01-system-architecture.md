@@ -228,7 +228,7 @@ The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `L
 | Seam | How |
 |---|---|
 | Another ACP agent | one entry in `apps/bridge/agents.json`; `?agent=<id>`. Level 0 needs the on-disk mirror + file-watch (slice 7). |
-| Model / provider | `RAD_MODEL` (+ `RAD_MODEL_BASE_URL` for any OpenAI-compatible endpoint); keys via `lb key run`. |
+| Model / provider | `RAD_MODELS` (switchable in the app through `session/set_config_option` — plain ACP, no profile extension) or `RAD_MODEL`; `RAD_MODEL_BASE_URL` for any OpenAI-compatible endpoint; keys in a gitignored `.env` (`.env.example`). |
 | New case / template / snippet | drop files under `apps/editor/fixtures/`; the loader globs them; `meta.json` binds the session. |
 | New editor command | one entry in `EDITOR_COMMANDS` + a case in `runEditorCommand` (`commands/registry.ts`); pure function over canonical Markdown, unit-tested; `apply.ts` performs the effect. |
 | New agent skill | one `prompts/skills/<name>.md` (frontmatter `description`, `hint`; body = expansion) — advertised and expanded by `RadReportAgentServer`; deepagents `skills=` later (routed through a `CompositeBackend` — the ACP backend cannot serve skill files). |

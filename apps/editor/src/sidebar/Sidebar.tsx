@@ -22,6 +22,7 @@ import {
   type AppendMessage,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { AuditRecord, FlagKind, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
 import { GROUP_LABEL, matchScore, type Command, type CommandGroups } from "../commands/registry.ts";
@@ -33,15 +34,30 @@ export type AgentPort = {
   /** Sends one turn; resolves with its stop reason (`end_turn`, `cancelled`, …, or `error`) — the QA gate counts on it. */
   prompt: (text: string) => Promise<string>;
   cancel: () => Promise<void>;
+  /** `session/set_config_option` — the model select; absent when the agent offers none. */
+  setConfigOption?: (configId: string, value: string) => Promise<void>;
 };
 
 export type HeaderState = {
   status: "disconnected" | "connecting" | "ready" | "error";
   agentName?: string;
   level?: ProfileLevel;
+  /** From `initialize` — informational; stale once the session's `model` option changes. */
   model?: string;
+  /** The session's config options (ACP); the `model` select drives the header's model control. */
+  configOptions?: SessionConfigOption[];
   error?: string;
 };
+
+type SelectChoice = { value: string; name: string };
+
+/** The `model` select, flattened (deepagents-acp sends plain options; the schema also allows groups). */
+export function modelSelect(options: SessionConfigOption[] | undefined): { current: string; choices: SelectChoice[] } | undefined {
+  const o = options?.find((c) => c.id === "model");
+  if (!o || o.type !== "select") return undefined;
+  const choices = (o.options as Array<SelectChoice | { options: SelectChoice[] }>).flatMap((x) => ("value" in x ? [x] : x.options));
+  return { current: o.currentValue, choices };
+}
 
 type Props = {
   state: SidebarState;
@@ -87,6 +103,7 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
   });
   const [tab, setTab] = useState<"chat" | "audit">("chat");
   const canSend = header.status === "ready" && agent !== null;
+  const model = modelSelect(header.configOptions);
   const last = state.messages[state.messages.length - 1];
   const stopped = last?.role === "assistant" && last.stopReason === "cancelled";
 
@@ -96,7 +113,24 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
         <span className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_DOT[header.status]}`} />
         <span className="font-medium">{header.agentName ?? "agent"}</span>
         {header.level !== undefined && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs">L{header.level}</span>}
-        {header.model && <span className="text-xs text-gray-500">· {header.model}</span>}
+        {model && agent?.setConfigOption ? (
+          // Switching mid-turn would swap the agent under the running prompt — wait for the turn.
+          <select
+            data-testid="model-select"
+            className="max-w-48 truncate rounded border border-gray-300 bg-white px-1 py-0.5 text-xs text-gray-700"
+            value={model.current}
+            disabled={state.isRunning}
+            onChange={(e) => void agent.setConfigOption!("model", e.target.value)}
+          >
+            {model.choices.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          (model?.current ?? header.model) && <span className="text-xs text-gray-500">· {model?.current ?? header.model}</span>
+        )}
         <span className="ml-auto text-xs text-gray-500">{state.isRunning ? "working…" : header.status}</span>
       </header>
       <nav className="flex gap-1 border-b border-gray-200 px-2 text-xs">
@@ -334,20 +368,36 @@ function decisionLabel(optionId: string | undefined, approved: boolean): string 
   }
 }
 
+/** Event families for the audit filter — the prefix before the first `.` (`fs.read` → `fs`). */
+const AUDIT_FAMILIES = ["fs", "permission", "proposal", "hunk", "flag", "qa", "status", "command", "session", "review"] as const;
+const familyOf = (event: string): string => event.split(".")[0] ?? event;
+
 function AuditPanel({ records }: { records: AuditRecord[] }) {
-  const rows = useMemo(() => [...records].reverse(), [records]);
+  const [family, setFamily] = useState<string>("all");
+  const rows = useMemo(() => [...records].reverse().filter((r) => family === "all" || familyOf(r.event) === family), [records, family]);
+  const present = useMemo(() => new Set(records.map((r) => familyOf(r.event))), [records]);
   return (
-    <ol className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-5">
-      {rows.length === 0 && <li className="text-gray-400">no events yet</li>}
-      {rows.map((r, i) => (
-        <li key={`${r.ts}-${i}`} className="border-b border-dotted border-gray-300">
-          <span className="text-gray-400">{r.ts.slice(11, 19)}</span> <span className="font-medium">{r.event}</span>
-          {r.path && <span className="text-gray-500"> {r.path.replace(/^\/worklist\/[^/]+\//, "")}</span>}
-          {r.hunkId && <span className="text-gray-500"> {r.hunkId}</span>}
-          {r.flagId && <span className="text-gray-500"> {r.flagId}</span>}
-          {r.outcome && <span className="text-gray-500"> → {r.outcome}</span>}
-        </li>
-      ))}
-    </ol>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div data-testid="audit-filter" className="flex flex-wrap gap-1 border-b border-gray-200 px-2 py-1 text-[11px]">
+        {["all", ...AUDIT_FAMILIES.filter((f) => present.has(f))].map((f) => (
+          <button key={f} type="button" data-active={family === f} className={`rounded px-1.5 py-0.5 ${family === f ? "bg-gray-800 text-white" : "bg-gray-200 text-gray-700"}`} onClick={() => setFamily(f)}>
+            {f}
+          </button>
+        ))}
+      </div>
+      <ol className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-5">
+        {rows.length === 0 && <li className="text-gray-400">no events yet</li>}
+        {rows.map((r, i) => (
+          <li key={`${r.ts}-${i}`} className="border-b border-dotted border-gray-300">
+            <span className="text-gray-400">{r.ts.slice(11, 19)}</span> <span className="text-gray-400">{r.actor.role}</span> <span className="font-medium">{r.event}</span>
+            {r.path && <span className="text-gray-500"> {r.path.replace(/^\/worklist\/[^/]+\//, "")}</span>}
+            {r.hunkId && <span className="text-gray-500"> {r.hunkId}</span>}
+            {r.flagId && <span className="text-gray-500"> {r.flagId}</span>}
+            {r.flagIds && r.flagIds.length > 0 && <span className="text-gray-500"> {r.flagIds.join(" ")}</span>}
+            {r.outcome && <span className="text-gray-500"> → {r.outcome}</span>}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

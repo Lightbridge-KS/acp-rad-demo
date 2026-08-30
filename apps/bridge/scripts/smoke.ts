@@ -16,6 +16,9 @@
  * case with a planted laterality discrepancy, `/qa` raises a `_rad/flag` of kind `discrepancy`
  * and writes nothing; back on the brain session (impression drafted, no discussed-with line),
  * `/qa` raises `critical_uncommunicated`. Flag checks use `some`, never exact counts.
+ * Stage 4 (slice 6): the provider switch is plain ACP — `session/new` advertises a `model`
+ * select in `configOptions`, `session/set_config_option` re-picks the current value (the agent
+ * graph is rebuilt) and a prompt on the rebuilt session still ends with `end_turn`.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -272,6 +275,24 @@ try {
   const brainFlags = [...flags];
   say(`[flags] stone=${JSON.stringify(stoneFlags.map((f) => f.kind))} brain=${JSON.stringify(brainFlags.map((f) => f.kind))}`);
 
+  // Stage 4 — the provider switch is plain ACP: session/new advertises a `model` select,
+  // session/set_config_option picks one (the agent is rebuilt), and the session keeps working.
+  const modelOption = (stoneSession.configOptions ?? []).find((o) => o.id === "model");
+  const modelOptionAdvertised = modelOption?.type === "select";
+  let setModelAccepted = false;
+  let r7: acp.PromptResponse | undefined;
+  if (modelOption?.type === "select") {
+    say(`[model] current=${modelOption.currentValue} options=${JSON.stringify(modelOption.options.map((o) => ("value" in o ? o.value : "<group>")))}`);
+    const res = await conn.agent.request(acp.methods.agent.session.setConfigOption, {
+      sessionId: stoneSession.sessionId,
+      configId: "model",
+      value: modelOption.currentValue,
+    });
+    setModelAccepted = res.configOptions.some((o) => o.id === "model" && o.type === "select" && o.currentValue === modelOption.currentValue);
+    active = stone;
+    r7 = await prompt("prompt 7", "Reply with the single word PONG.", stoneSession.sessionId);
+  }
+
   const checks = {
     radCapsAdvertised: radCaps !== undefined,
     pong,
@@ -293,6 +314,9 @@ try {
     criticalUncommunicatedFlagged: brainFlags.some((f) => f.kind === "critical_uncommunicated"),
     qaNoWrites: counts.fsWrite === writesBefore && counts.editToolCalls === editsBefore,
     qaEndTurn: r5.stopReason === "end_turn" && r6.stopReason === "end_turn",
+    modelOptionAdvertised,
+    setModelAccepted,
+    promptAfterSwitch: r7?.stopReason === "end_turn",
   };
   say(`[checks] ${JSON.stringify(checks)}`);
   const ok = Object.values(checks).every(Boolean);
