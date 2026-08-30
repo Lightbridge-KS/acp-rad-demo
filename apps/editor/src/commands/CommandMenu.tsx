@@ -65,9 +65,9 @@ export function CommandMenu({ groups, highlighted, onHighlight, onSelect, empty 
                   onClick={() => onSelect(c)}
                   className={`flex w-full items-baseline gap-2 px-3 py-1 text-left ${active ? "bg-sky-50" : "hover:bg-gray-50"}`}
                 >
-                  <span className="font-mono text-xs">/{c.id}</span>
-                  {c.hint && <span className="font-mono text-[10px] text-gray-400">{c.hint}</span>}
-                  <span className="ml-auto truncate text-xs text-gray-500">{c.description}</span>
+                  <span className="font-mono text-xs whitespace-nowrap">/{c.id}</span>
+                  {c.hint && <span className="font-mono text-[10px] whitespace-nowrap text-gray-400">{c.hint}</span>}
+                  <span className="ml-auto min-w-0 truncate text-xs text-gray-500">{c.description}</span>
                 </button>
               );
             })}

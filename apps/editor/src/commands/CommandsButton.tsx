@@ -32,7 +32,7 @@ export function CommandsButton({ commands, onRun }: Props) {
   };
 
   return (
-    <div ref={rootRef} className="pointer-events-auto absolute top-1.5 right-3 z-20 text-sm">
+    <div ref={rootRef} className="pointer-events-auto absolute top-1.5 left-40 z-20 text-sm">
       <button
         type="button"
         aria-haspopup="listbox"
@@ -58,7 +58,7 @@ export function CommandsButton({ commands, onRun }: Props) {
         ⌘ Commands ▾
       </button>
       {open && groups && (
-        <div className="absolute right-0 mt-1 w-[28rem] rounded-md border border-gray-200 bg-white shadow-lg">
+        <div className="absolute left-0 mt-1 w-[28rem] rounded-md border border-gray-200 bg-white shadow-lg">
           <CommandMenu groups={groups} highlighted={highlighted} onHighlight={setHighlighted} onSelect={run} />
         </div>
       )}

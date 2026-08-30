@@ -20,7 +20,7 @@ import {
 } from "@assistant-ui/react";
 import type { AuditRecord, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
-import { GROUP_LABEL, flattenCommands, type Command, type CommandGroups } from "../commands/registry.ts";
+import { GROUP_LABEL, type Command, type CommandGroups } from "../commands/registry.ts";
 import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
 
@@ -126,16 +126,15 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
 function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
   const aui = useAui();
   const groups = commands?.() ?? EMPTY_GROUPS;
-  const flat = flattenCommands(groups);
-  const groupOf = useMemo(() => {
-    const m = new Map<string, keyof CommandGroups>();
-    for (const g of ["skills", "editor", "suggested"] as const) for (const c of groups[g]) m.set(c.id, g);
-    return m;
-  }, [groups]);
+  // One item per (group, command): a command may sit in Suggested and in its own group.
+  const entries = useMemo(
+    () => (Object.keys(GROUP_LABEL) as (keyof CommandGroups)[]).flatMap((g) => groups[g].map((c) => ({ id: `${g}:${c.id}`, group: g, command: c }))),
+    [groups],
+  );
   const slash = unstable_useSlashCommandAdapter({
     removeOnExecute: true,
-    commands: flat.map((c) => ({
-      id: c.id,
+    commands: entries.map(({ id, command: c }) => ({
+      id,
       label: `/${c.id}`,
       description: c.description,
       execute: () => {
@@ -145,6 +144,7 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
       },
     })),
   });
+  const groupOf = (itemId: string): keyof CommandGroups | undefined => itemId.split(":")[0] as keyof CommandGroups | undefined;
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <ComposerPrimitive.Root className="relative border-t border-gray-200 p-2">
@@ -159,7 +159,7 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
             {(items) => {
               let lastGroup: string | undefined;
               return items.map((item, index) => {
-                const g = groupOf.get(item.id);
+                const g = groupOf(item.id);
                 const header = g && g !== lastGroup ? GROUP_LABEL[g] : null;
                 lastGroup = g ?? lastGroup;
                 return (
@@ -170,8 +170,8 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
                       index={index}
                       className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-gray-50 data-[highlighted]:bg-sky-50"
                     >
-                      <span className="font-mono text-xs">{item.label}</span>
-                      <span className="ml-auto truncate text-xs text-gray-500">{item.description}</span>
+                      <span className="font-mono text-xs whitespace-nowrap">{item.label}</span>
+                      <span className="ml-auto min-w-0 truncate text-xs text-gray-500">{item.description}</span>
                     </ComposerPrimitive.Unstable_TriggerPopoverItem>
                   </div>
                 );

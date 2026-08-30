@@ -3,7 +3,9 @@
  *
  * Armed when the radiologist types `/` at a line start or after whitespace; `slashAt` then
  * derives the query from the caret on every editor change, reading one line only, and closes
- * the moment the caret leaves the query. While open, ↑↓⏎⇥⎋ are taken on the editor container
+ * the moment the caret leaves the query. The caret is tracked from `selection-change` events
+ * (transformed by each text-change delta) — never via `quill.getSelection()`, which runs
+ * `quill.update()` and can emit a text-change of its own, looping with React. While open, ↑↓⏎⇥⎋ are taken on the editor container
  * in the capture phase — Quill's keyboard module bails on `defaultPrevented`, so a plain
  * `preventDefault()` is all it takes. Selecting removes the `/query` text as a `user` edit
  * (⌘Z restores it) and runs the command.
@@ -15,17 +17,16 @@ import { CommandMenu, menuKey } from "./CommandMenu.tsx";
 import { filterCommands, flattenCommands, parseInvocation, type Command, type CommandGroups } from "./registry.ts";
 
 export type SlashState = { offset: number; query: string };
+export type Range = { index: number; length: number };
 
-/** The subset of Quill `slashAt` needs — small enough to fake in tests. */
+/** The subset of Quill `slashAt` needs — small enough to fake in tests. Read-only calls only. */
 export type SlashQuill = {
-  getSelection: () => { index: number; length: number } | null;
   getLine: (index: number) => [unknown, number];
   getText: (index: number, length: number) => string;
 };
 
-/** Where the `/` typed at `armedAt` now stands relative to the caret, or `null` if the menu must close. */
-export function slashAt(q: SlashQuill, armedAt: number): SlashState | null {
-  const sel = q.getSelection();
+/** Where the `/` typed at `armedAt` now stands relative to the caret `sel`, or `null` if the menu must close. */
+export function slashAt(q: SlashQuill, armedAt: number, sel: Range | null): SlashState | null {
   if (!sel || sel.length !== 0) return null;
   const [, offset] = q.getLine(sel.index);
   const lineStart = sel.index - offset;
@@ -48,6 +49,39 @@ export function insertedSlashAt(change: Op[]): number {
     } else if (op.insert !== undefined) pos += 1;
   }
   return -1;
+}
+
+/** Where the caret sits right after a user's own change: after its last insert, or at its delete. */
+export function caretAfter(change: Op[]): Range | null {
+  let pos = 0;
+  let caret: number | null = null;
+  for (const op of change) {
+    if (op.retain !== undefined) pos += typeof op.retain === "number" ? op.retain : 1;
+    else if (op.insert !== undefined) {
+      pos += typeof op.insert === "string" ? op.insert.length : 1;
+      caret = pos;
+    } else if (op.delete !== undefined) caret = pos;
+  }
+  return caret === null ? null : { index: caret, length: 0 };
+}
+
+/** Move a caret through a change delta (inserts before it push it right, deletes pull it left). */
+export function transformRange(sel: Range | null, change: Op[]): Range | null {
+  if (!sel) return null;
+  let pos = 0;
+  let index = sel.index;
+  for (const op of change) {
+    if (pos > index) break;
+    if (op.retain !== undefined) pos += typeof op.retain === "number" ? op.retain : 1;
+    else if (op.insert !== undefined) {
+      const n = typeof op.insert === "string" ? op.insert.length : 1;
+      if (pos <= index) index += n;
+      pos += n;
+    } else if (op.delete !== undefined) {
+      index = Math.max(pos, index - op.delete);
+    }
+  }
+  return { index, length: 0 };
 }
 
 /** `name arg` narrows to the exact command; a bare name filters as usual. */
@@ -73,40 +107,53 @@ export function SlashMenu({ quill, tick, commands, onRun }: Props) {
   const [armedAt, setArmedAt] = useState<number | null>(null);
   const [state, setState] = useState<SlashState | null>(null);
   const [highlighted, setHighlighted] = useState(0);
+  const selRef = useRef<Range | null>(null);
+  const armedRef = useRef<number | null>(null);
+  armedRef.current = armedAt;
 
-  // Arm on a typed "/" (position taken from the change itself, not from the selection).
+  // Track the caret from events; arm on a typed "/" (position taken from the change itself).
   useEffect(() => {
-    const onText = (change: Delta, _old: Delta, source: string) => {
-      if (source !== "user") return;
-      const at = insertedSlashAt(change.ops);
-      if (at >= 0) {
-        setArmedAt(at);
-        setHighlighted(0);
-      }
-    };
-    quill.on("text-change", onText);
-    return () => {
-      quill.off("text-change", onText);
-    };
-  }, [quill]);
-
-  // Re-derive on every editor change (text or selection) while armed.
-  useEffect(() => {
-    if (armedAt === null) {
-      setState(null);
-      return;
-    }
     const derive = () => {
-      const next = slashAt(quill, armedAt);
+      const at = armedRef.current;
+      if (at === null) return;
+      const sel = selRef.current;
+      if (sel && sel.index > quill.getLength() - 1) return; // caret ahead of a model that is still updating
+      const next = slashAt(quill, at, sel);
       setState(next);
       if (!next) setArmedAt(null);
     };
-    derive();
-    quill.on("editor-change", derive);
-    return () => {
-      quill.off("editor-change", derive);
+    const onText = (change: Delta, _old: Delta, source: string) => {
+      // A user change carries its own caret (Quill's selection-change already reported it and
+      // must not be transformed twice); an api change moves whatever caret we had.
+      selRef.current = source === "user" ? (caretAfter(change.ops) ?? selRef.current) : transformRange(selRef.current, change.ops);
+      if (source === "user") {
+        const at = insertedSlashAt(change.ops);
+        if (at >= 0) {
+          selRef.current = { index: at + 1, length: 0 };
+          armedRef.current = at;
+          setArmedAt(at);
+          setHighlighted(0);
+        }
+      }
+      derive();
     };
-  }, [quill, armedAt, tick]);
+    // Quill reports the caret before the model catches up with a keystroke; derive after the
+    // text-change has landed (the text-change handler itself derives synchronously).
+    const onSelection = (range: Range | null) => {
+      if (range) selRef.current = range;
+      setTimeout(derive, 0);
+    };
+    quill.on("text-change", onText);
+    quill.on("selection-change", onSelection);
+    return () => {
+      quill.off("text-change", onText);
+      quill.off("selection-change", onSelection);
+    };
+  }, [quill]);
+
+  useEffect(() => {
+    if (armedAt === null) setState(null);
+  }, [armedAt]);
 
   const resolved = useMemo(() => (state ? groupsForQuery(commands(), state.query) : null), [state, commands]);
   const flat = useMemo(() => (resolved ? flattenCommands(resolved.groups) : []), [resolved]);
@@ -148,6 +195,7 @@ export function SlashMenu({ quill, tick, commands, onRun }: Props) {
     return () => el.removeEventListener("keydown", onKey, true);
   }, [state, quill, select, close]);
 
+  void tick; // re-render on every text-change so the bounds follow the text
   if (!state || !resolved) return null;
   const bounds = quill.getBounds(state.offset, 0);
   if (!bounds) return null;

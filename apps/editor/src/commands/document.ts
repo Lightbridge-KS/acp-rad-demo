@@ -102,3 +102,9 @@ export function foldInShortPrelim(template: string, shortPrelimBuffer: string): 
 export function isBlankBuffer(markdown: string): boolean {
   return canonicalize(markdown) === "\n";
 }
+
+/** Blank for the command menu's purposes: empty, or nothing but the `/query` being typed. */
+export function isBlankApartFromSlash(markdown: string): boolean {
+  const lines = canonicalLines(markdown);
+  return lines.length === 0 || (lines.length === 1 && lines[0]!.startsWith("/"));
+}

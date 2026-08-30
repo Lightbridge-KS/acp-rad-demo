@@ -54,16 +54,25 @@ export function ReportEditor({ initialOps, onReady, onUserChange, overlay }: Pro
       },
     });
     q.setContents(initialOpsRef.current, "api");
+    // The overlay re-positions on the next frame, not synchronously: Quill can emit a burst of
+    // text-changes inside one event, and a React update per emit would chain commits.
+    let frame = 0;
     q.on("text-change", (change, _old, source) => {
       if (source === "user") {
         afterUserChange(q, change);
         onUserChangeRef.current?.(q, change);
       }
-      setTick((t) => t + 1);
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          setTick((t) => t + 1);
+        });
+      }
     });
     setQuill(q);
     onReadyRef.current?.(q);
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       container.replaceChildren();
       setQuill(null);
     };

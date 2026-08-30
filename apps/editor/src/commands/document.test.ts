@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import SP_BRAIN from "../../fixtures/snippets/sp-brain.md?raw";
 import CT_BRAIN from "../../fixtures/templates/ct-brain-er.md?raw";
 import US_WA from "../../fixtures/templates/us-wa.md?raw";
-import { foldInShortPrelim, instantiateTemplate, isBlankBuffer, regionSnippetId, shortPrelimDocument, templateIdFor } from "./document.ts";
+import { foldInShortPrelim, instantiateTemplate, isBlankApartFromSlash, isBlankBuffer, regionSnippetId, shortPrelimDocument, templateIdFor } from "./document.ts";
 
 const lines = (md: string) => md.replace(/\n$/, "").split("\n");
 
@@ -102,4 +102,9 @@ describe("short prelim", () => {
 describe("isBlankBuffer", () => {
   it.each(["", "\n", "  \n\n", "\r\n"])("%j is blank", (md) => expect(isBlankBuffer(md)).toBe(true));
   it("a title alone is not blank", () => expect(isBlankBuffer("**T**\n")).toBe(false));
+  it("a lone /query being typed still counts as blank for the menu", () => {
+    expect(isBlankApartFromSlash("/temp\n")).toBe(true);
+    expect(isBlankApartFromSlash("\n")).toBe(true);
+    expect(isBlankApartFromSlash("**T**\n/temp\n")).toBe(false);
+  });
 });

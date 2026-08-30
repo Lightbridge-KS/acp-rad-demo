@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { menuKey } from "./CommandMenu.tsx";
 import type { CommandGroups } from "./registry.ts";
-import { groupsForQuery, insertedSlashAt, slashAt, type SlashQuill } from "./SlashMenu.tsx";
+import { caretAfter, groupsForQuery, insertedSlashAt, slashAt, transformRange, type SlashQuill } from "./SlashMenu.tsx";
 
-/** A one-document fake: `text` is the whole editor, `caret` the selection index. */
-function fakeQuill(text: string, caret: number, length = 0): SlashQuill {
+/** A one-document fake: `text` is the whole editor; the caret is passed to `slashAt` explicitly. */
+function fakeQuill(text: string): SlashQuill {
   return {
-    getSelection: () => ({ index: caret, length }),
     getLine: (index) => {
       const lineStart = text.lastIndexOf("\n", index - 1) + 1;
       return [null, index - lineStart];
@@ -18,18 +17,35 @@ function fakeQuill(text: string, caret: number, length = 0): SlashQuill {
 describe("slashAt", () => {
   it("opens for / at a line start and reads the query up to the caret", () => {
     const t = "**T**\n/impr\n";
-    expect(slashAt(fakeQuill(t, 11), 6)).toEqual({ offset: 6, query: "impr" });
+    expect(slashAt(fakeQuill(t), 6, { index: 11, length: 0 })).toEqual({ offset: 6, query: "impr" });
   });
   it("opens after whitespace, never inside a word (2/5, dd/mm)", () => {
-    expect(slashAt(fakeQuill("grade 2/5\n", 9), 7)).toBeNull();
-    expect(slashAt(fakeQuill("see /temp\n", 9), 4)).toEqual({ offset: 4, query: "temp" });
+    expect(slashAt(fakeQuill("grade 2/5\n"), 7, { index: 9, length: 0 })).toBeNull();
+    expect(slashAt(fakeQuill("see /temp\n"), 4, { index: 9, length: 0 })).toEqual({ offset: 4, query: "temp" });
   });
   it("closes when the caret leaves the query, on a selection, or on another line", () => {
     const t = "/impr\nnext\n";
-    expect(slashAt(fakeQuill(t, 0), 0)).toBeNull(); // caret before the slash
-    expect(slashAt(fakeQuill(t, 8), 0)).toBeNull(); // another line
-    expect(slashAt(fakeQuill(t, 5, 2), 0)).toBeNull(); // selection
-    expect(slashAt(fakeQuill("x /a /b\n", 7), 2)).toBeNull(); // a later slash is not the armed one
+    expect(slashAt(fakeQuill(t), 0, { index: 0, length: 0 })).toBeNull(); // caret before the slash
+    expect(slashAt(fakeQuill(t), 0, { index: 8, length: 0 })).toBeNull(); // another line
+    expect(slashAt(fakeQuill(t), 0, { index: 5, length: 2 })).toBeNull(); // selection
+    expect(slashAt(fakeQuill("x /a /b\n"), 2, { index: 7, length: 0 })).toBeNull(); // a later slash is not the armed one
+  });
+});
+
+describe("transformRange", () => {
+  it("moves the caret with inserts and deletes before it, leaves it on changes after it", () => {
+    expect(transformRange({ index: 5, length: 0 }, [{ retain: 2 }, { insert: "ab" }])).toEqual({ index: 7, length: 0 });
+    expect(transformRange({ index: 5, length: 0 }, [{ retain: 2 }, { delete: 2 }])).toEqual({ index: 3, length: 0 });
+    expect(transformRange({ index: 5, length: 0 }, [{ retain: 8 }, { insert: "x" }])).toEqual({ index: 5, length: 0 });
+    expect(transformRange(null, [{ insert: "x" }])).toBeNull();
+  });
+});
+
+describe("caretAfter", () => {
+  it("lands after the typed text or at the deletion", () => {
+    expect(caretAfter([{ retain: 6 }, { insert: "/" }])).toEqual({ index: 7, length: 0 });
+    expect(caretAfter([{ retain: 3 }, { delete: 2 }])).toEqual({ index: 3, length: 0 });
+    expect(caretAfter([{ retain: 3 }, { retain: 1, attributes: { bold: true } }])).toBeNull();
   });
 });
 

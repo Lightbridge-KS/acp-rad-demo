@@ -5,9 +5,9 @@ import { connectAgent, type AgentHandle } from "./agent/connection.ts";
 import { AuditLog } from "./audit/log.ts";
 import { applyEffect } from "./commands/apply.ts";
 import { CommandsButton } from "./commands/CommandsButton.tsx";
-import { isBlankBuffer } from "./commands/document.ts";
+import { isBlankApartFromSlash } from "./commands/document.ts";
 import { listCommands, runEditorCommand, type Command, type CommandContext, type CommandGroups } from "./commands/registry.ts";
-import { SlashMenu } from "./commands/SlashMenu.tsx";
+import { SlashMenu, caretAfter, transformRange, type Range } from "./commands/SlashMenu.tsx";
 import { cases, defaultCase, snippets, templates, type CaseFixture } from "./fixtures/index.ts";
 import { HunkControls } from "./report/HunkControls.tsx";
 import { ReportEditor } from "./report/ReportEditor.tsx";
@@ -42,6 +42,24 @@ export default function App() {
   const [shortPrelim, setShortPrelim] = useState<boolean>(fixture.session.shortPrelim);
   const statusRef = useRef(status);
   statusRef.current = status;
+  // The caret, tracked from Quill events: `quill.getSelection()` runs `quill.update()` and may
+  // emit a text-change, so it must never be called from render or a tick-dependent effect.
+  const caretRef = useRef<Range | null>(null);
+  useEffect(() => {
+    if (!quill) return;
+    const onSelection = (range: Range | null) => {
+      if (range) caretRef.current = range;
+    };
+    const onText = (change: { ops: import("quill").Op[] }, _old: unknown, source: string) => {
+      caretRef.current = source === "user" ? (caretAfter(change.ops) ?? caretRef.current) : transformRange(caretRef.current, change.ops);
+    };
+    quill.on("selection-change", onSelection);
+    quill.on("text-change", onText);
+    return () => {
+      quill.off("selection-change", onSelection);
+      quill.off("text-change", onText);
+    };
+  }, [quill]);
   const agentRef = useRef<AgentHandle | null>(null);
   const initialOps = useMemo(() => markdownToDelta(fixture.reportMarkdown), [fixture]);
   const proposals = useMemo(() => new ProposalStore(fixture.session.accession), [fixture]);
@@ -178,9 +196,9 @@ export default function App() {
 
   const commandContext = useCallback((): CommandContext => {
     const markdown = store?.reportMarkdown() ?? "\n";
-    const caret = quill ? caretInfo(quill) : { caretSection: null, caretAtEnd: false };
+    const caret = quill ? caretInfo(quill, caretRef.current) : { caretSection: null, caretAtEnd: false };
     return {
-      blank: isBlankBuffer(markdown),
+      blank: isBlankApartFromSlash(markdown),
       shortPrelim,
       caretSection: caret.caretSection,
       caretAtEnd: caret.caretAtEnd,
@@ -245,6 +263,7 @@ export default function App() {
   const decide = useCallback((toolCallId: string, hunkId: string, verb: Verb) => proposals.decide(toolCallId, hunkId, verb), [proposals]);
   const pending = proposalList.filter((p) => p.state === "pending");
   const pendingHunks = pending.reduce((n, p) => n + p.hunks.filter((h) => p.states[h.id] === "pending").length, 0);
+  const allLocal = pending.length > 0 && pending.every((p) => p.origin === "local");
 
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_400px] grid-rows-[auto_minmax(0,1fr)]">
@@ -261,8 +280,8 @@ export default function App() {
           {pendingHunks > 0 && (
             <span className="flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-50 px-2 py-0.5">
               {pendingHunks} change{pendingHunks === 1 ? "" : "s"}
-              <button type="button" className="font-medium underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "accept_edit"))}>
-                Accept all for review
+              <button type="button" className="font-medium underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, allLocal ? "accept" : "accept_edit"))}>
+                {allLocal ? "Accept all" : "Accept all for review"}
               </button>
               <button type="button" className="underline" onClick={() => pending.forEach((p) => proposals.decideAll(p.toolCallId, "reject"))}>
                 Reject all
@@ -316,8 +335,7 @@ export default function App() {
 }
 
 /** Which section the caret is in (overlay lines skipped) and whether it sits on the last line. */
-function caretInfo(quill: Quill): { caretSection: SectionId | null; caretAtEnd: boolean } {
-  const sel = quill.getSelection();
+function caretInfo(quill: Quill, sel: Range | null): { caretSection: SectionId | null; caretAtEnd: boolean } {
   const lines = splitLines(currentOps(quill));
   if (!sel || lines.length === 0) return { caretSection: null, caretAtEnd: false };
   let idx = 0;
