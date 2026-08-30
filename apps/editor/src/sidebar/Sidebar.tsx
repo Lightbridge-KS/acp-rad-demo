@@ -3,6 +3,9 @@
  * unstyled primitives, styled with Tailwind. It MIRRORS decisions — the permission is
  * decided in the report — so no `onRespondToToolApproval` is supplied (load-bearing).
  *
+ * Flags (design 04 §3.5) are the one decision the sidebar owns: open flags sit in a card strip
+ * above the thread with an **Acknowledge** button; the report only carries the mark.
+ *
  * The composer's `/` lists the agent's **skills only** (assistant-ui's trigger popover,
  * unstable API, pinned 0.15.17): the chat box is the agent's channel, so a deterministic
  * editor command never runs from it (KS, 2026-08-30 — those live in `Commands ▾` and the
@@ -19,9 +22,10 @@ import {
   type AppendMessage,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import type { AuditRecord, ProfileLevel } from "acp-rad";
+import type { AuditRecord, FlagKind, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
 import { GROUP_LABEL, matchScore, type Command, type CommandGroups } from "../commands/registry.ts";
+import type { Flag } from "../report/flags.ts";
 import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
 
@@ -48,6 +52,11 @@ type Props = {
   commands?: () => CommandGroups;
   /** Run an argument-less skill picked in the composer. */
   onCommand?: (command: Command) => void;
+  /** Open flags, newest last. */
+  flags?: Flag[];
+  onAcknowledge?: (flagId: string) => void;
+  /** Scroll the report to the flag's line. */
+  onLocate?: (flagId: string) => void;
 };
 
 const STATUS_DOT: Record<HeaderState["status"], string> = {
@@ -59,7 +68,7 @@ const STATUS_DOT: Record<HeaderState["status"], string> = {
 
 const EMPTY_GROUPS: CommandGroups = { suggested: [], editor: [], skills: [] };
 
-export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand }: Props) {
+export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand, flags = [], onAcknowledge, onLocate }: Props) {
   const runtime = useExternalStoreRuntime<AcpMessage>({
     messages: state.messages,
     isRunning: state.isRunning,
@@ -107,6 +116,7 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
       ) : (
         <AssistantRuntimeProvider runtime={runtime}>
           <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
+            {flags.length > 0 && <FlagCards flags={flags} onAcknowledge={onAcknowledge} onLocate={onLocate} />}
             <ThreadPrimitive.Viewport className="flex-1 space-y-2 overflow-y-auto px-3 py-3 text-sm">
               <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
               {stopped && (
@@ -235,10 +245,54 @@ const Reasoning = ({ text }: { text: string }) => (
 
 const KIND_LABEL: Record<string, string> = { read: "read", edit: "edit", search: "search", execute: "run", think: "think", fetch: "fetch" };
 
+const FLAG_KIND_STYLE: Record<FlagKind, string> = {
+  discrepancy: "border-rose-300 bg-rose-100 text-rose-800",
+  omission: "border-amber-300 bg-amber-100 text-amber-800",
+  unsupported: "border-violet-300 bg-violet-100 text-violet-800",
+  critical_uncommunicated: "border-red-400 bg-red-100 text-red-800",
+};
+
+/** Open flags: kind · summary · where; Acknowledge is the sidebar's one decision. */
+function FlagCards({ flags, onAcknowledge, onLocate }: { flags: Flag[]; onAcknowledge?: (id: string) => void; onLocate?: (id: string) => void }) {
+  return (
+    <div data-testid="flags" className="max-h-56 space-y-1.5 overflow-y-auto border-b border-rose-200 bg-rose-50/60 px-3 py-2 text-sm">
+      {flags.map((f) => {
+        const loc = f.locations[0];
+        return (
+          <div key={f.id} data-testid="flag" data-kind={f.kind} className="rounded border border-rose-200 bg-white px-2 py-1.5 shadow-sm">
+            <button type="button" className="w-full text-left" onClick={() => onLocate?.(f.id)} title="Show in the report">
+              <span className={`mr-2 rounded border px-1.5 py-0.5 font-mono text-[11px] ${FLAG_KIND_STYLE[f.kind]}`}>{f.kind.replaceAll("_", " ")}</span>
+              {loc && (
+                <span className="font-mono text-[11px] text-gray-500">
+                  {loc.path.replace(/^\/worklist\/[^/]+\//, "")}
+                  {loc.line !== undefined ? ` · line ${loc.line}` : ""}
+                </span>
+              )}
+              <p className="mt-1 text-gray-800">{f.summary}</p>
+            </button>
+            <div className="mt-1 flex justify-end">
+              <button
+                type="button"
+                data-testid="acknowledge"
+                onClick={() => onAcknowledge?.(f.id)}
+                className="rounded-full border border-gray-300 px-2 py-0.5 text-xs hover:bg-gray-100"
+              >
+                Acknowledge
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Mirrors the decision made in the report; never offers one. */
 const ToolCard = ({ toolName, args, status, approval, artifact }: ToolCallMessagePartProps) => {
   const diff = artifact as { path?: string } | undefined;
   const title = String((args as { title?: string }).title ?? "");
+  // deepagents-acp gives non-fs tools kind `other` and the bare tool name as title.
+  const label = title === "raise_flag" ? "flag" : (KIND_LABEL[toolName] ?? toolName);
   const decision = approval && (approval.approved === undefined ? "awaiting your decision in the report" : decisionLabel(approval.optionId, approval.approved));
   return (
     <div
@@ -248,7 +302,7 @@ const ToolCard = ({ toolName, args, status, approval, artifact }: ToolCallMessag
         status.type === "requires-action" ? "border-emerald-500 bg-emerald-50" : "border-gray-200 bg-white"
       }`}
     >
-      <span className="rounded bg-gray-100 px-1">{KIND_LABEL[toolName] ?? toolName}</span>
+      <span className="rounded bg-gray-100 px-1">{label}</span>
       <span className="truncate" title={title}>
         {title}
       </span>
@@ -289,6 +343,7 @@ function AuditPanel({ records }: { records: AuditRecord[] }) {
           <span className="text-gray-400">{r.ts.slice(11, 19)}</span> <span className="font-medium">{r.event}</span>
           {r.path && <span className="text-gray-500"> {r.path.replace(/^\/worklist\/[^/]+\//, "")}</span>}
           {r.hunkId && <span className="text-gray-500"> {r.hunkId}</span>}
+          {r.flagId && <span className="text-gray-500"> {r.flagId}</span>}
           {r.outcome && <span className="text-gray-500"> → {r.outcome}</span>}
         </li>
       ))}

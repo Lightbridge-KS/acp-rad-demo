@@ -3,12 +3,14 @@
  * (bridge re-frames to the agent's stdio), negotiates the ACP-Rad profile through
  * `_meta.rad`, binds one session to one accession, serves the virtual namespace through
  * `fs/*` from the ReportStore, answers `session/request_permission` from the radiologist's
- * per-hunk decisions (ProposalStore), enforces the grant rule on writes, and streams
- * `session/update`s to the sidebar. Every consequential event is stamped into the audit log.
+ * per-hunk decisions (ProposalStore), enforces the grant rule on writes, accepts `_rad/flag`
+ * requests, and streams `session/update`s to the sidebar. Every consequential event is stamped
+ * into the audit log.
  */
 import * as acp from "@agentclientprotocol/sdk";
 import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
 import {
+  FLAG_METHOD,
   PROFILE_VERSION,
   RAD_ERRORS,
   RAD_META_KEY,
@@ -17,6 +19,8 @@ import {
   readRadAgentCaps,
   sliceLines,
   worklistRoot,
+  zFlagParams,
+  type FlagParams,
   type ProfileLevel,
   type RadClientCaps,
   type RadSessionMeta,
@@ -53,6 +57,12 @@ export type AgentEvents = {
   onPermission?: (toolCallId: string, options: PermissionOption[]) => void;
   /** An unsolicited write was turned into a proposal the editor must render. */
   onUnsolicited?: (proposal: Proposal) => void;
+  /**
+   * A `_rad/flag` request (design 04 §3.5). Called synchronously before the request is answered
+   * `acknowledged`: the editor records the flag and marks its line; the radiologist's own
+   * acknowledgement is a later, local act.
+   */
+  onFlag?: (params: FlagParams) => void;
 };
 
 export type AgentHandle = {
@@ -136,6 +146,11 @@ export async function connectAgent(
       const outcome = g ? proposals.outcomeFor(g, content) : "partial";
       audit.record(`fs.write.${outcome}`, { path, toolCallId: id, argsHash: hash, outcome });
       return { _meta: { [RAD_META_KEY]: { outcome, toolCallId: id } satisfies RadWriteOutcome } };
+    })
+    .onRequest(FLAG_METHOD, zFlagParams, (ctx) => {
+      // The Client acknowledges on receipt (KS, 2026-08-30): the turn never waits for a human.
+      events.onFlag?.(ctx.params);
+      return { outcome: "acknowledged" as const };
     })
     .onRequest(acp.methods.client.session.requestPermission, async (ctx) => {
       const requestId = ctx.params.toolCall.toolCallId;

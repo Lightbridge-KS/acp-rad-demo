@@ -1,6 +1,6 @@
 import type Quill from "quill";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { markdownToDelta, sectionIdOfLine, type AuditRecord, type ReportStatus, type SectionId } from "acp-rad";
+import { canonicalLines, markdownToDelta, resolvePath, sectionIdOfLine, type AuditRecord, type FlagParams, type ReportStatus, type SectionId } from "acp-rad";
 import { connectAgent, type AgentHandle } from "./agent/connection.ts";
 import { AuditLog } from "./audit/log.ts";
 import { applyEffect } from "./commands/apply.ts";
@@ -9,9 +9,10 @@ import { isBlankApartFromSlash } from "./commands/document.ts";
 import { listCommands, runEditorCommand, type Command, type CommandContext, type CommandGroups } from "./commands/registry.ts";
 import { SlashMenu, caretAfter, transformRange, type Range } from "./commands/SlashMenu.tsx";
 import { cases, defaultCase, snippets, templates, type CaseFixture } from "./fixtures/index.ts";
+import { FlagStore, type Flag } from "./report/flags.ts";
 import { HunkControls } from "./report/HunkControls.tsx";
 import { ReportEditor } from "./report/ReportEditor.tsx";
-import { clearAllUnreviewed, decideHunkOps, discardHunksOps, isInsertLine, lineLength, lineText, overlayOps, splitLines, unreviewedLineCount } from "./report/overlay.ts";
+import { clearAllUnreviewed, clearFlagOps, decideHunkOps, discardHunksOps, flagLineIndex, flagLineOps, isInsertLine, lineLength, lineText, overlayOps, splitLines, unreviewedLineCount } from "./report/overlay.ts";
 import { applyOps, currentOps } from "./report/overlayQuill.ts";
 import { ProposalStore, type Proposal, type Verb } from "./report/proposals.ts";
 import { makeReportStore } from "./report/reportStore.ts";
@@ -33,6 +34,7 @@ export default function App() {
   const [header, setHeader] = useState<HeaderState>({ status: "disconnected" });
   const [quill, setQuill] = useState<Quill | null>(null);
   const [proposalList, setProposalList] = useState<Proposal[]>([]);
+  const [flagList, setFlagList] = useState<Flag[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
@@ -63,6 +65,8 @@ export default function App() {
   const agentRef = useRef<AgentHandle | null>(null);
   const initialOps = useMemo(() => markdownToDelta(fixture.reportMarkdown), [fixture]);
   const proposals = useMemo(() => new ProposalStore(fixture.session.accession), [fixture]);
+  // Flags belong to the radiologist once raised: per study, never cancelled by the agent's turn.
+  const flags = useMemo(() => new FlagStore(), [fixture]);
   const audit = useMemo(() => new AuditLog(), [fixture]);
   // One ReportStore for the agent (fs/*) and the editor commands: live Quill, overlays stripped.
   const store = useMemo(() => (quill ? makeReportStore(quill, fixture, () => statusRef.current) : null), [quill, fixture]);
@@ -115,6 +119,49 @@ export default function App() {
   }, [proposals, audit, quill]);
 
   useEffect(() => audit.subscribe(() => setAuditRecords([...audit.records])), [audit]);
+  useEffect(() => flags.subscribe(() => setFlagList(flags.list())), [flags]);
+
+  // ---- flags (design 04 §3.5): the agent's second channel — a card in the sidebar, a mark on the line, never an edit
+  const raiseFlag = useCallback(
+    (p: FlagParams) => {
+      const flag = flags.raise(p);
+      const loc = p.locations[0];
+      let found = false;
+      if (quill && store && loc?.line) {
+        const r = resolvePath(loc.path, fixture.session.accession);
+        if (r && (r.kind === "report" || r.kind === "section")) {
+          // The line number counts the text the agent actually read: the grant's base text while one is open.
+          const served = proposals.peekGrant(loc.path)?.baseText ?? safe(() => store.read(loc.path));
+          const text = served == null ? undefined : canonicalLines(served)[loc.line - 1];
+          if (text !== undefined) {
+            const res = flagLineOps(currentOps(quill), { section: r.kind === "section" ? r.id : null, ordinal: loc.line, text }, flag.id);
+            if (res.found) applyOps(quill, res.ops);
+            found = res.found;
+          }
+        }
+      }
+      audit.record("flag.raised", { flagId: flag.id, ...(loc ? { path: loc.path } : {}), outcome: found || !loc ? flag.kind : `${flag.kind} · line not found` });
+    },
+    [flags, quill, store, fixture, proposals, audit],
+  );
+  const acknowledgeFlag = useCallback(
+    (id: string) => {
+      if (!flags.acknowledge(id)) return;
+      if (quill) applyOps(quill, clearFlagOps(currentOps(quill), id));
+      audit.record("flag.acknowledged", { flagId: id });
+    },
+    [flags, quill, audit],
+  );
+  const locateFlag = useCallback(
+    (id: string) => {
+      if (!quill) return;
+      const idx = flagLineIndex(currentOps(quill), id);
+      if (idx < 0) return;
+      quill.setSelection(idx, 0, "silent");
+      quill.scrollSelectionIntoView();
+    },
+    [quill],
+  );
 
   // Connect once the editor exists: the ReportStore serves fs/* from live Quill state.
   useEffect(() => {
@@ -144,6 +191,10 @@ export default function App() {
       onUnsolicited: (p) => {
         renderProposal(p);
       },
+      onFlag: (p) => {
+        if (cancelled) return; // this effect's own teardown (StrictMode's first mount)
+        raiseFlag(p);
+      },
       onClosed: (reason) => {
         if (cancelled) return; // this effect's own teardown (e.g. StrictMode's first mount)
         agentRef.current = null;
@@ -167,7 +218,7 @@ export default function App() {
       agentRef.current?.close();
       agentRef.current = null;
     };
-  }, [quill, store, fixture, proposals, audit, renderProposal]);
+  }, [quill, store, fixture, proposals, audit, renderProposal, raiseFlag]);
 
   const agentPort = useMemo<AgentPort | null>(
     () =>
@@ -264,6 +315,7 @@ export default function App() {
   const pending = proposalList.filter((p) => p.state === "pending");
   const pendingHunks = pending.reduce((n, p) => n + p.hunks.filter((h) => p.states[h.id] === "pending").length, 0);
   const allLocal = pending.length > 0 && pending.every((p) => p.origin === "local");
+  const openFlags = flagList.filter((f) => f.state === "open");
 
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_400px] grid-rows-[auto_minmax(0,1fr)]">
@@ -305,6 +357,11 @@ export default function App() {
               </button>
             </span>
           )}
+          {openFlags.length > 0 && (
+            <span data-testid="flag-count" className="rounded-full border border-rose-400 bg-rose-50 px-2 py-0.5">
+              {openFlags.length} flag{openFlags.length === 1 ? "" : "s"}
+            </span>
+          )}
           <span data-testid="status" className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">
             {status}
             {shortPrelim ? " · short prelim" : ""}
@@ -329,7 +386,18 @@ export default function App() {
           )}
         />
       </main>
-      <Sidebar state={state} dispatch={dispatch} header={header} agent={agentPort} audit={auditRecords} commands={commands} onCommand={runCommand} />
+      <Sidebar
+        state={state}
+        dispatch={dispatch}
+        header={header}
+        agent={agentPort}
+        audit={auditRecords}
+        commands={commands}
+        onCommand={runCommand}
+        flags={openFlags}
+        onAcknowledge={acknowledgeFlag}
+        onLocate={locateFlag}
+      />
     </div>
   );
 }

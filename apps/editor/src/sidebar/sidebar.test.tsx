@@ -8,12 +8,22 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useReducer } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Command, CommandGroups } from "../commands/registry.ts";
+import type { Flag } from "../report/flags.ts";
 import { Sidebar, type AgentPort } from "./Sidebar.tsx";
 import { initialSidebarState, sidebarReducer, type SidebarAction } from "./store.ts";
 
 let dispatchRef: ((a: SidebarAction) => void) | null = null;
 
-function Harness({ agent, commands, onCommand }: { agent: AgentPort; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
+type HarnessProps = {
+  agent: AgentPort;
+  commands?: () => CommandGroups;
+  onCommand?: (c: Command) => void;
+  flags?: Flag[];
+  onAcknowledge?: (id: string) => void;
+  onLocate?: (id: string) => void;
+};
+
+function Harness({ agent, commands, onCommand, flags, onAcknowledge, onLocate }: HarnessProps) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   dispatchRef = dispatch;
   return (
@@ -25,6 +35,9 @@ function Harness({ agent, commands, onCommand }: { agent: AgentPort; commands?: 
       audit={[]}
       commands={commands}
       onCommand={onCommand}
+      flags={flags}
+      onAcknowledge={onAcknowledge}
+      onLocate={onLocate}
     />
   );
 }
@@ -102,6 +115,31 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("stopped").textContent).toBe("stopped");
     act(() => dispatchRef!({ type: "user", text: "again" }));
     expect(screen.queryByTestId("stopped")).toBeNull();
+  });
+
+  it("shows open flags as cards and owns the Acknowledge decision; a raise_flag tool card reads 'flag'", () => {
+    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const onAcknowledge = vi.fn();
+    const onLocate = vi.fn();
+    const flags: Flag[] = [
+      { id: "f1", kind: "discrepancy", summary: "FINDINGS say right; IMPRESSION says left.", locations: [{ path: "/worklist/A/sections/impression.md", line: 2 }], state: "open", raisedAt: "t" },
+      { id: "f2", kind: "critical_uncommunicated", summary: "Hyperdense M1 with no discussed-with line.", locations: [], state: "open", raisedAt: "t" },
+    ];
+    render(<Harness agent={agent} flags={flags} onAcknowledge={onAcknowledge} onLocate={onLocate} />);
+    const cards = screen.getAllByTestId("flag");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.getAttribute("data-kind")).toBe("discrepancy");
+    expect(cards[0]!.textContent).toMatch(/sections\/impression\.md · line 2/);
+    expect(cards[1]!.textContent).toMatch(/critical uncommunicated/);
+    fireEvent.click(screen.getAllByTestId("acknowledge")[1]!);
+    expect(onAcknowledge).toHaveBeenCalledWith("f2");
+    fireEvent.click(screen.getByText(/FINDINGS say right/));
+    expect(onLocate).toHaveBeenCalledWith("f1");
+    // The proposal decision still never lives here.
+    expect(screen.queryByRole("button", { name: /Accept|Reject|Allow|Deny/ })).toBeNull();
+
+    update({ sessionUpdate: "tool_call", toolCallId: "q1", title: "raise_flag", kind: "other", status: "pending", content: [] });
+    expect(screen.getByTestId("tool").textContent).toMatch(/^flag/);
   });
 
   it("composer / lists skills only and runs the picked one — editor commands are not chat", async () => {
