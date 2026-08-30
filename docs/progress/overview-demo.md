@@ -1,9 +1,9 @@
 ---
-summary: Tracker for the ACP-Rad PoC — slices 1–7 as checkboxes, Now/Next, deferred items, confirmed contracts.
+summary: Tracker for the ACP-Rad Demo — slices 1–7 as checkboxes, Now/Next, deferred items, confirmed contracts.
 read_when: Starting any session on this repo; before planning a slice; when landing work (tick boxes, add SHAs).
 ---
 
-# ACP-Rad PoC — progress
+# ACP-Rad Demo — progress
 
 Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · [`04-skills`](../design/04-skills.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
 

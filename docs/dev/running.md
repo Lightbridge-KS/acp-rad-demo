@@ -1,9 +1,9 @@
 ---
-summary: How to install, run, test, and switch LLM providers for the ACP-Rad PoC (bridge + editor + rad-agent).
+summary: How to install, run, test, and switch LLM providers for the ACP-Rad Demo (bridge + editor + rad-agent).
 read_when: Starting the app, running gates, changing RAD_MODEL, or debugging the transport chain.
 ---
 
-# Running the PoC
+# Running the demo
 
 ## Install
 

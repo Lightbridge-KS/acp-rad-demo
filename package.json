@@ -1,5 +1,5 @@
 {
-  "name": "acp-rad-poc",
+  "name": "acp-rad-demo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.18.2",

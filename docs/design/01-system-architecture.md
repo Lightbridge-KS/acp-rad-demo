@@ -1,16 +1,16 @@
 ---
-summary: System & OOP architecture of the ACP-Rad PoC — C1–C3 (browser editor = ACP Client, WS⇄stdio bridge, Python rad-agent, acp-rad profile package), key classes, the proposal → human gate flow, the profile as exercised, invariants and trust boundary.
+summary: System & OOP architecture of the ACP-Rad Demo — C1–C3 (browser editor = ACP Client, WS⇄stdio bridge, Python rad-agent, acp-rad profile package), key classes, the proposal → human gate flow, the profile as exercised, invariants and trust boundary.
 read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridge ⇄ agent, acp-rad seam); planning a slice; asking "where does X live and why".
 ---
 
-# ACP-Rad PoC — System & OOP Architecture
+# ACP-Rad Demo — System & OOP Architecture
 
 > Source: this repo (as built through slice 5) + slice-4/5 design sessions 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 6–7, marked *planned*) · Type: Application
-> See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Data Architecture](./05-data-architecture.md) · [ACP wire shape](../protocol/01-acp-shape.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-poc.md`](../progress/overview-poc.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
+> See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Data Architecture](./05-data-architecture.md) · [ACP wire shape](../protocol/01-acp-shape.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-demo.md`](../progress/overview-demo.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
 
 ## 1. Overview
 
-A radiology report editor in the browser (QuillJS) hosting an AI agent through the **Agent Client Protocol (ACP v1)**, extended by the **ACP-Rad profile** (`_meta.rad` + `_rad/*` only). The radiologist prompts; the agent proposes; every write passes the human gate inside the report. Demo target: radiology colleagues at Ramathibodi; the profile later consolidates into a separate standard, which this PoC *exercises* but does not define.
+A radiology report editor in the browser (QuillJS) hosting an AI agent through the **Agent Client Protocol (ACP v1)**, extended by the **ACP-Rad profile** (`_meta.rad` + `_rad/*` only). The radiologist prompts; the agent proposes; every write passes the human gate inside the report. Demo target: radiology colleagues at Ramathibodi; the profile later consolidates into a separate standard, which this demo *exercises* but does not define.
 
 **Type: Application** — three entry points run: `apps/editor/src/main.tsx` (Vite SPA), `apps/bridge/src/index.ts` (Node WebSocket server), `agents/rad-agent/src/rad_agent/main.py` (stdio ACP agent). `packages/acp-rad` is a library, but only the editor consumes it.
 
@@ -29,7 +29,7 @@ A radiology report editor in the browser (QuillJS) hosting an AI agent through t
 ```mermaid
 flowchart LR
     rad([Radiologist])
-    subgraph PoC["ACP-Rad PoC (localhost)"]
+    subgraph Demo["ACP-Rad Demo (localhost)"]
         editor["apps/editor — browser, the ACP Client"]
         bridge["apps/bridge — WS ⇄ stdio"]
         agent["agents/rad-agent — the ACP Agent (Level 2)"]

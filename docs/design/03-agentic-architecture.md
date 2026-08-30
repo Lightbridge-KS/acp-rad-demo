@@ -1,9 +1,9 @@
 ---
-summary: The agentic anatomy of the ACP-Rad PoC — the rad-agent core (deepagents/LangGraph loop, model layer, system prompt), its context and memory, tools over the editor's virtual filesystem, and the orchestration organs (the human gate split between agent and editor, sessions, audit); organ presence matrix with absences as decisions; Level 0 agents as swappable cores.
+summary: The agentic anatomy of the ACP-Rad Demo — the rad-agent core (deepagents/LangGraph loop, model layer, system prompt), its context and memory, tools over the editor's virtual filesystem, and the orchestration organs (the human gate split between agent and editor, sessions, audit); organ presence matrix with absences as decisions; Level 0 agents as swappable cores.
 read_when: Touching agents/rad-agent; adding a tool, skill, or `_rad/*` method; changing how permissions/HITL work; wiring another ACP agent; asking "where does the model's reasoning live and what constrains it".
 ---
 
-# ACP-Rad PoC — Agentic Architecture
+# ACP-Rad Demo — Agentic Architecture
 
 > Source: this repo (as built through slice 3) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (*planned*) · Type: Hybrid (C) — an application hosting an embedded agent runtime
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Surface (UX/AX)](./02-surface-architecture.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md)

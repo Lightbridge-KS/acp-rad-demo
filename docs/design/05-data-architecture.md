@@ -1,9 +1,9 @@
 ---
-summary: Data architecture of the ACP-Rad PoC — where report data rests (the live Quill Delta as the one system of record, the virtual namespace it is served through, fixtures, proposals/grants, the audit JSONL) and how it moves (canonicalization, fs/* reads, diff → hunks → overlay → decision → grant → write outcome, the audit lineage); ownership, keys, lifetimes, PHI boundary, open questions.
+summary: Data architecture of the ACP-Rad Demo — where report data rests (the live Quill Delta as the one system of record, the virtual namespace it is served through, fixtures, proposals/grants, the audit JSONL) and how it moves (canonicalization, fs/* reads, diff → hunks → overlay → decision → grant → write outcome, the audit lineage); ownership, keys, lifetimes, PHI boundary, open questions.
 read_when: Asking "where does X live, who writes it, who reads it, how stale is it"; adding a store, a fixture kind, an audit event or a `_meta.rad` field; reasoning about the grant window or agent-side staleness; before designing the flag store (slice 5) or the worklist / persistence (slice 6).
 ---
 
-# ACP-Rad PoC — Data Architecture
+# ACP-Rad Demo — Data Architecture
 
 > Source: this repo at `main @ 96ffec2` (built through slice 4) · Date: 2026-08-30 · Mode: Explain · Data system: **Hybrid** — an in-memory document (the report) served as a schema-on-read virtual namespace · file fixtures · an event stream with an append-only audit log
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · **[ACP wire shape](../protocol/01-acp-shape.md)** — the protocol every flow below rides on · Glossary [`CONTEXT.md`](../../CONTEXT.md)

@@ -1,4 +1,4 @@
-# ACP-Rad PoC — task runner (polyglot: pnpm workspace + uv project)
+# ACP-Rad Demo — task runner (polyglot: pnpm workspace + uv project)
 
 set shell := ["zsh", "-cu"]
 

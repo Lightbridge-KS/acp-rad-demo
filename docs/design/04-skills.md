@@ -3,12 +3,12 @@ summary: Design of the agent's skills — the commands it advertises (`/impressi
 read_when: Adding or changing a skill; writing or reviewing a skill's expansion text; deciding what `/compare` or `/proofread` may touch; wiring `available_commands_update`; authoring a prior-bearing fixture; scripting scenario 2.
 ---
 
-# ACP-Rad PoC — Skills
+# ACP-Rad Demo — Skills
 
 > Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slices 4–5; the QA gate *planned*, slice 6) · Scope: what the agent does when the radiologist invokes a skill
 > See also: [Surface Architecture](./02-surface-architecture.md) §2.2 (the command registry the skills appear in) · [Agentic Architecture](./03-agentic-architecture.md) §5, §9 (the agent's organs; why deepagents `skills=` is out) · Glossary [`CONTEXT.md`](../../CONTEXT.md)
 
-A **skill** is a command the agent advertises and performs; its result is a proposal. In this PoC a skill is nothing more than **a named prompt expansion** (built in slice 4; `/qa` is the exception, §3.5): the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
+A **skill** is a command the agent advertises and performs; its result is a proposal. In this demo a skill is nothing more than **a named prompt expansion** (built in slice 4; `/qa` is the exception, §3.5): the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
 
 ## 1. Mechanism
 

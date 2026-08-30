@@ -1,5 +1,5 @@
 ---
-summary: Ubiquitous language — the domain glossary for the ACP-Rad PoC (report, proposal & human gate, commands, lifecycle, agent & protocol terms).
+summary: Ubiquitous language — the domain glossary for the ACP-Rad Demo (report, proposal & human gate, commands, lifecycle, agent & protocol terms).
 read_when:
   - introducing, renaming, or disambiguating a domain term
   - naming a type, class, module, command, or UI label after a domain concept
@@ -205,7 +205,7 @@ _Avoid_: critical finding (that is an imaging finding), alert (the card), findin
 Why a flag was raised — `discrepancy` (the report contradicts itself), `omission` (a critical or clinically significant finding missing from the impression), `unsupported` (an impression item with no basis in the findings), `critical_uncommunicated` (a critical finding with no record of communication). The only four; style has no kind.
 
 **PHI boundary**:
-The declared class of data an agent may see; this PoC is `research_synthetic` — no real patient data, ever.
+The declared class of data an agent may see; this demo is `research_synthetic` — no real patient data, ever.
 
 **Audit record**:
 One entry in the trail of consequential events — reads, proposals, decisions, writes with their outcome, review clears, commands, cancels — stamped by the Client and never trusted from the agent.

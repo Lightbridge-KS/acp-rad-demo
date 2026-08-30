@@ -1,6 +1,6 @@
-# acp-rad-poc
+# acp-rad-demo
 
-PoC: a radiology report editor (QuillJS, browser) hosting an AI agent through the **Agent Client Protocol (ACP)**, extended by the **ACP-Rad** profile. The radiologist prompts; the agent proposes; every write is approved in the editor. Demo target: radiology colleagues at Ramathibodi. Later: the profile consolidates into a separate standard.
+Demo: a radiology report editor (QuillJS, browser) hosting an AI agent through the **Agent Client Protocol (ACP)**, extended by the **ACP-Rad** profile. The radiologist prompts; the agent proposes; every write is approved in the editor. Demo target: radiology colleagues at Ramathibodi. Later: the profile consolidates into a separate standard.
 
 ## Read first
 
@@ -10,8 +10,8 @@ PoC: a radiology report editor (QuillJS, browser) hosting an AI agent through th
 - `docs/design/03-agentic-architecture.md` — the agent's organs: loop, tools over `fs/*`, the HITL gate split across the boundary.
 - `docs/design/04-skills.md` — the agent's skills (`/impression` · `/compare` · `/proofread`) as prompt expansions: contract, expansion text, guardrails, the boundary with `/qa`.
 - `docs/design/05-data-architecture.md` — where data rests and how it moves: the report as system of record, the namespace, proposals/grants, the audit lineage.
-- `docs/protocol/01-acp-shape.md` — ACP v1 as spoken here: method surface, session lifecycle, every message shape, the profile's footprint, and the M×N → M+N analysis (§9) — the reason this PoC exists.
-- `docs/progress/overview-poc.md` — where we are; update it as slices land.
+- `docs/protocol/01-acp-shape.md` — ACP v1 as spoken here: method surface, session lifecycle, every message shape, the profile's footprint, and the M×N → M+N analysis (§9) — the reason this demo exists.
+- `docs/progress/overview-demo.md` — where we are; update it as slices land.
 - `docs/ideas/acp-rad-protocol-proposal.md` — the profile proposal (draft; deltas listed in design 01 §8). Original one-file draft: `docs/archive/design/acp-rad-poc-spec.md` (§0 survey, §11 ledger).
 - `docs/dev/running.md` — how to run and switch models.
 

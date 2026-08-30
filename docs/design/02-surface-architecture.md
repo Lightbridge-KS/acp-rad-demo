@@ -1,9 +1,9 @@
 ---
-summary: The ACP-Rad PoC as its two users see it — the radiologist (editor screen, commands, `/` menu, change pills, lifecycle pill, sidebar) and the agent (virtual report filesystem, advertised skills, errors that teach). Journeys for scenarios 0–5, interaction states, naming rules.
+summary: The ACP-Rad Demo as its two users see it — the radiologist (editor screen, commands, `/` menu, change pills, lifecycle pill, sidebar) and the agent (virtual report filesystem, advertised skills, errors that teach). Journeys for scenarios 0–5, interaction states, naming rules.
 read_when: Building or changing anything the radiologist clicks or types (toolbar, menus, hunk pills, statuses, sidebar); adding a command or snippet; changing what the agent can read/write; scripting the demo.
 ---
 
-# ACP-Rad PoC — Surface Architecture (UX · AX)
+# ACP-Rad Demo — Surface Architecture (UX · AX)
 
 > Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 5) + Design (*planned* = slice 6+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)

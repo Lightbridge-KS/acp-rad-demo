@@ -1,9 +1,9 @@
 ---
-summary: The shape of the Agent Client Protocol (ACP v1) as this PoC speaks it — peers and transport (browser Client ⇄ WS bridge ⇄ stdio Agent), the full JSON-RPC method surface marked used / unused / pruned, the session lifecycle, every message as actually sent here (`_meta.rad` on initialize · session/new · fs/write response, `session/update` kinds, clinical permission verbs, `_rad/audit`, `_rad/flag`), stop reasons, error codes, the SDK quirks the client absorbs — and §9, the M×N → M+N analysis: what the PoC demonstrates about editor ⇄ agent decoupling, what it does not yet, and where the profile itself risks re-creating M×N.
+summary: The shape of the Agent Client Protocol (ACP v1) as this demo speaks it — peers and transport (browser Client ⇄ WS bridge ⇄ stdio Agent), the full JSON-RPC method surface marked used / unused / pruned, the session lifecycle, every message as actually sent here (`_meta.rad` on initialize · session/new · fs/write response, `session/update` kinds, clinical permission verbs, `_rad/audit`, `_rad/flag`), stop reasons, error codes, the SDK quirks the client absorbs — and §9, the M×N → M+N analysis: what the demo demonstrates about editor ⇄ agent decoupling, what it does not yet, and where the profile itself risks re-creating M×N.
 read_when: Reading a bridge trace or an audit line and needing to know what a frame is; adding or changing a method, a `_meta.rad` field or a `_rad/*` extension; wiring another ACP agent; checking what vanilla ACP guarantees versus what the profile adds.
 ---
 
-# ACP as spoken by the ACP-Rad PoC
+# ACP as spoken by the ACP-Rad Demo
 
 > Source: this repo at `main @ 96ffec2` · `@agentclientprotocol/sdk` 1.4.0 (TypeScript, in the browser) · `agent-client-protocol` 0.12.1 + `deepagents-acp` 0.0.11 (Python) · Date: 2026-08-30 · Mode: Explain
 > See also: [Data Architecture](../design/05-data-architecture.md) — what the frames carry and where it rests · [System Architecture](../design/01-system-architecture.md) §6, §8 · [Agentic Architecture](../design/03-agentic-architecture.md) §3, §6 · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md)
@@ -12,7 +12,7 @@ read_when: Reading a bridge trace or an audit line and needing to know what a fr
 
 The Agent Client Protocol is JSON-RPC 2.0 between two peers that both expose methods: the **Client** (an editor — owns the UI, the files, the permission gate) and the **Agent** (the AI process). Either side sends requests (with `id`, expecting a result or error) and notifications (no `id`). The baseline transport is newline-delimited JSON over the agent's stdio. `protocolVersion: 1`. Three sanctioned extension slots: a `_meta` object on any message, `_`-prefixed custom methods, and custom capabilities at `initialize`. ACP-Rad uses exactly those three and nothing else — the profile never adds a root field.
 
-In this PoC **the browser is the Client**: the TypeScript SDK has no Node dependency and speaks ACP over a WebSocket stream, so there is no server-side client and no protocol duplication. The Python agent is a `deepagents-acp` `AgentServerACP` subclass that inherits the whole vanilla surface and adds the profile.
+In this demo **the browser is the Client**: the TypeScript SDK has no Node dependency and speaks ACP over a WebSocket stream, so there is no server-side client and no protocol duplication. The Python agent is a `deepagents-acp` `AgentServerACP` subclass that inherits the whole vanilla surface and adds the profile.
 
 ## 2. Peers and transport
 
@@ -35,7 +35,7 @@ flowchart LR
 
 ## 3. Method surface
 
-Every method the v1 SDKs know, and what this PoC does with it. "Request" expects a response; "notification" does not.
+Every method the v1 SDKs know, and what this demo does with it. "Request" expects a response; "notification" does not.
 
 ### 3.1 Client → Agent
 
@@ -66,7 +66,7 @@ Every method the v1 SDKs know, and what this PoC does with it. "Request" expects
 |---|---|---|---|
 | `_rad/audit` | Client → (bridge) | notification | **used** — the bridge persists and drops it; it never reaches the agent (§5.11) |
 | `_rad/flag` | Agent → Client | request | **used** (slice 5) — the QA channel; the Client answers `{outcome: "acknowledged"}` on receipt (§5.12) |
-| `_rad/focus_state` · `_rad/section_patch` | — | — | proposal-only; dropped or replaced in this PoC (design 01 §8) |
+| `_rad/focus_state` · `_rad/section_patch` | — | — | proposal-only; dropped or replaced in this demo (design 01 §8) |
 
 Capabilities as advertised: client `{fs: {readTextFile: true, writeTextFile: true}}`; agent (unchanged from `deepagents-acp`) `{loadSession: false, promptCapabilities: {image: true}}`. The profile's own capabilities live entirely in `_meta.rad` (§7).
 
@@ -302,9 +302,9 @@ Everything above is enforced on the **client** side — the agent-side pieces (`
 - **Custom methods on the TS SDK** — `onRequest(method: string, paramsParser, handler)` exists; `_rad/flag` is registered without touching the SDK.
 - **Outgoing extension requests on the Python SDK** — `AgentSideConnection` has no `send_request`; use `ext_method(name, params)` (prepends `_`, returns the raw result dict, raises `RequestError` on an error response, `ConnectionError` on a dropped pipe). A tool that *raises* escapes the LangGraph loop and kills the `session/prompt` handler — `raise_flag` returns every failure as text; a pydantic validation error on its args becomes an error `ToolMessage` the model reads.
 
-## 9. M×N → M+N — what the PoC demonstrates
+## 9. M×N → M+N — what this demo demonstrates
 
-The reason this PoC exists: without a protocol, every report editor that wants an AI agent integrates each agent separately (M editors × N agents). ACP promises that each side implements one contract (M + N). Does the PoC demonstrate it? **Architecturally yes; empirically half; with one caveat about the profile.**
+The reason this demo exists: without a protocol, every report editor that wants an AI agent integrates each agent separately (M editors × N agents). ACP promises that each side implements one contract (M + N). Does the demo demonstrate it? **Architecturally yes; empirically half; with one caveat about the profile.**
 
 ```text
                      vanilla ACP (M+N)                    ACP-Rad profile — a second contract
@@ -321,7 +321,7 @@ The reason this PoC exists: without a protocol, every report editor that wants a
 
 - **The editor has no agent-specific code path.** Its only agent-dependent inputs are `?agent=<id>` and the Level inferred from `initialize._meta.rad`. Three agents sit in `agents.json`; the two registry ones (`claude-agent-acp`, `gemini --experimental-acp`) were never written for a report editor, yet the same `connection.ts` handles them through the unsolicited-write path (§5.9).
 - **The agent has no editor-specific code path.** `rad-agent` knows nothing about Quill or the browser: every byte it sees arrives through `fs/read_text_file`, every byte it proposes leaves through `fs/write_text_file`. `AcpClientBackend` is the entire coupling.
-- **Swapping is safe because the invariants sit on the client.** INV-1, the read-only rules, the `final` lock and the audit are enforced in `apps/editor` (§7), so an unknown agent can be plugged in *without being trusted*. This is the strongest thing the PoC shows: not the arithmetic, but why the arithmetic is acceptable in a clinical setting.
+- **Swapping is safe because the invariants sit on the client.** INV-1, the read-only rules, the `final` lock and the audit are enforced in `apps/editor` (§7), so an unknown agent can be plugged in *without being trusted*. This is the strongest thing the demo shows: not the arithmetic, but why the arithmetic is acceptable in a clinical setting.
 
 ### 9.2 Not yet demonstrated — the numbers
 
@@ -332,10 +332,10 @@ The reason this PoC exists: without a protocol, every report editor that wants a
 
 ### 9.3 The caveat — M+N holds only as far as the profile standardizes
 
-Everything rad-native (`_meta.rad`, `accept · accept_edit · reject`, the manifest, the write outcome, `_rad/flag`) is a **second contract** on top of vanilla ACP (§7). Inside this PoC both sides implement it once, so the sum still holds. If the profile stayed PoC-local, every rad-aware editor × every rad-aware agent would re-negotiate it — M×N in miniature for exactly the features that matter clinically. Two things keep that from being fatal:
+Everything rad-native (`_meta.rad`, `accept · accept_edit · reject`, the manifest, the write outcome, `_rad/flag`) is a **second contract** on top of vanilla ACP (§7). Inside this demo both sides implement it once, so the sum still holds. If the profile stayed demo-local, every rad-aware editor × every rad-aware agent would re-negotiate it — M×N in miniature for exactly the features that matter clinically. Two things keep that from being fatal:
 
 - the **Level ladder** — an agent that does not know the profile degrades to Level 0 instead of failing, so the vanilla M+N is never lost;
-- **consolidating the profile into a standard** — the stated follow-on to this PoC, and the reason its extensions are confined to `_meta.rad` and `_rad/*` (nothing that a conforming ACP peer would reject).
+- **consolidating the profile into a standard** — the stated follow-on to this demo, and the reason its extensions are confined to `_meta.rad` and `_rad/*` (nothing that a conforming ACP peer would reject).
 
 ### 9.4 Two honest limits
 
