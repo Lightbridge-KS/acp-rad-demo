@@ -1,15 +1,18 @@
 """Skills — the commands the agent advertises, as prompt expansions (design 04 §1).
 
-One ``prompts/skills/<name>.md`` per skill: a two-key frontmatter (``description``,
-optional ``hint``) and a body that replaces ``/<name> [arg]`` at prompt time, with
+One ``prompts/skills/<name>.md`` per skill: a frontmatter (``description``, optional
+``hint``, optional ``requires`` — a client capability from ``initialize._meta.rad`` the skill
+needs, e.g. ``flags``) and a body that replaces ``/<name> [arg]`` at prompt time, with
 ``{arg}`` substituted. Adding a skill is adding a file; nothing else registers it.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from acp.schema import AvailableCommand, AvailableCommandInput, UnstructuredCommandInput
 
@@ -26,6 +29,8 @@ class Skill:
     description: str
     body: str
     hint: str | None = None
+    #: Client capability (``_meta.rad`` key) without which the skill is not advertised.
+    requires: str | None = None
 
     def expand(self, arg: str | None) -> str:
         """The prompt text the model receives for ``/name arg``."""
@@ -46,7 +51,11 @@ def parse_skill(name: str, text: str) -> Skill:
     if not meta.get("description"):
         raise ValueError(f"skill {name!r}: frontmatter needs a description")
     return Skill(
-        name=name, description=meta["description"], body=m.group("body"), hint=meta.get("hint")
+        name=name,
+        description=meta["description"],
+        body=m.group("body"),
+        hint=meta.get("hint"),
+        requires=meta.get("requires") or None,
     )
 
 
@@ -59,8 +68,11 @@ def load_skills(directory: Path = SKILLS_DIR) -> dict[str, Skill]:
     return skills
 
 
-def advertise(skills: dict[str, Skill]) -> list[AvailableCommand]:
-    """The ``available_commands_update`` payload for these skills."""
+def advertise(
+    skills: dict[str, Skill], client_caps: Mapping[str, Any] | None = None
+) -> list[AvailableCommand]:
+    """The ``available_commands_update`` payload: every skill whose ``requires`` the client has."""
+    caps = client_caps or {}
     return [
         AvailableCommand(
             name=s.name,
@@ -68,6 +80,7 @@ def advertise(skills: dict[str, Skill]) -> list[AvailableCommand]:
             input=AvailableCommandInput(UnstructuredCommandInput(hint=s.hint)) if s.hint else None,
         )
         for s in skills.values()
+        if s.requires is None or bool(caps.get(s.requires))
     ]
 
 

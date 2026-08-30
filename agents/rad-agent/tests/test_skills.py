@@ -14,8 +14,16 @@ from rad_agent.skills import SKILLS_DIR, advertise, expand, load_skills, parse_s
 def test_every_skill_file_parses_and_is_advertised() -> None:
     skills = load_skills()
     names = sorted(p.stem for p in SKILLS_DIR.glob("*.md"))
-    assert list(skills) == names == ["compare", "impression", "proofread"]
-    ads = advertise(skills)
+    assert list(skills) == names == ["compare", "impression", "proofread", "qa"]
+    # `/qa` needs the client's `flags` capability: hidden without it, advertised with it.
+    assert skills["qa"].requires == "flags"
+    assert [a.name for a in advertise(skills)] == ["compare", "impression", "proofread"]
+    assert [a.name for a in advertise(skills, {"flags": False})] == [
+        "compare",
+        "impression",
+        "proofread",
+    ]
+    ads = advertise(skills, {"profileVersion": "0.1", "flags": True})
     assert [a.name for a in ads] == names
     by_name = {a.name: a for a in ads}
     assert by_name["compare"].input is not None
@@ -26,7 +34,8 @@ def test_every_skill_file_parses_and_is_advertised() -> None:
 
 def test_parse_skill_frontmatter_and_body() -> None:
     s = parse_skill("x", "---\ndescription: Do x\nhint: [thing]\n---\nBody with {arg}.\n")
-    assert (s.description, s.hint) == ("Do x", "[thing]")
+    assert (s.description, s.hint, s.requires) == ("Do x", "[thing]", None)
+    assert parse_skill("q", "---\ndescription: Q\nrequires: flags\n---\nbody").requires == "flags"
     assert s.expand("A1") == "Body with A1."
     assert s.expand(None) == "Body with ."
     with pytest.raises(ValueError):
@@ -61,6 +70,26 @@ async def test_new_session_advertises_skills_after_the_response() -> None:
     assert session_id == created.session_id
     assert update.session_update == "available_commands_update"
     assert [c.name for c in update.available_commands] == ["compare", "impression", "proofread"]
+
+
+async def test_new_session_advertises_qa_when_the_client_accepts_flags() -> None:
+    sent: list[object] = []
+
+    class FakeConn:
+        async def session_update(self, session_id: str, update: object, **kwargs: object) -> None:
+            sent.append(update)
+
+    server = RadReportAgentServer()
+    server._conn = FakeConn()  # type: ignore[assignment]
+    server.client_rad_caps = {"profileVersion": "0.1", "flags": True}
+    await server.new_session("/worklist/ACC1", mcp_servers=[], rad={"accession": "ACC1"})
+    await asyncio.sleep(0)
+    assert [c.name for c in sent[0].available_commands] == [
+        "compare",
+        "impression",
+        "proofread",
+        "qa",
+    ]  # type: ignore[attr-defined]
 
 
 async def test_new_session_without_a_connection_is_silent() -> None:

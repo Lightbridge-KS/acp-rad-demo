@@ -6,7 +6,8 @@ Profile additions ride in ``_meta.rad`` (ACP v1 has no other extension slot):
 - ``session/new`` binds the session to an accession from the client's ``_meta.rad`` and
   advertises the skills (``available_commands_update``, design 04 §1).
 - ``session/prompt`` expands ``/skill [arg]`` into the skill's authored text.
-- ``_rad/*`` extension methods are routed to ``ext_method`` (none implemented yet).
+- ``_rad/flag`` is sent *to* the client by the ``raise_flag`` tool (``rad_agent.flags``) when
+  the client negotiated ``flags``; incoming ``_rad/*`` requests route to ``ext_method`` (none).
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from rad_agent import AGENT_NAME, PROFILE_VERSION
 from rad_agent.agent import build_agent
 from rad_agent.backend import AcpClientBackend
 from rad_agent.config import model_spec
+from rad_agent.flags import make_raise_flag_tool
 from rad_agent.permissions import PermissionRewritingClient
 from rad_agent.skills import Skill, advertise, expand, load_skills
 
@@ -43,12 +45,11 @@ log = logging.getLogger(__name__)
 
 RAD_META_KEY = "rad"
 
-#: What this agent implements of the profile. Level = 1 (present, no L2 caps) for now;
-#: ``flags`` flips to True in slice 5.
+#: What this agent implements of the profile. ``flags`` ⇒ Level 2 (rad-native).
 AGENT_RAD_CAPS: dict[str, Any] = {
     "profileVersion": PROFILE_VERSION,
     "focusState": False,
-    "flags": False,
+    "flags": True,
     "codedContent": [],
 }
 
@@ -104,7 +105,13 @@ class RadReportAgentServer(AgentServerACP):
         if not manifest:
             log.warning("session %s has no manifest; ls/glob/grep will be empty", session_id)
         backend = AcpClientBackend(self._conn, session_id, list(manifest))
-        return build_agent(context, backend=backend, accession=rad.get("accession"))
+        # Profile tools only when the client negotiated the capability (a Level-1 client
+        # would answer `_rad/flag` with method-not-found).
+        tools = [make_raise_flag_tool(self._conn, session_id)] if self._client_has("flags") else []
+        return build_agent(context, backend=backend, accession=rad.get("accession"), tools=tools)
+
+    def _client_has(self, cap: str) -> bool:
+        return bool((self.client_rad_caps or {}).get(cap))
 
     async def initialize(
         self,
@@ -159,7 +166,7 @@ class RadReportAgentServer(AgentServerACP):
         send = getattr(conn, "session_update", None)
         if send is None or not self.skills:
             return
-        update = update_available_commands(advertise(self.skills))
+        update = update_available_commands(advertise(self.skills, self.client_rad_caps))
         task = asyncio.create_task(send(session_id=session_id, update=update))
         self._background.add(task)
         task.add_done_callback(self._background.discard)

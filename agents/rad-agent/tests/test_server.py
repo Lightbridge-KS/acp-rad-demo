@@ -59,9 +59,10 @@ async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
 
     captured: dict[str, object] = {}
 
-    def fake_build_agent(context, *, backend, accession):
+    def fake_build_agent(context, *, backend, accession, tools=()):
         captured["backend"] = backend
         captured["accession"] = accession
+        captured["tools"] = list(tools)
         return object()  # stands in for the compiled graph
 
     monkeypatch.setattr(server_mod, "build_agent", fake_build_agent)
@@ -77,6 +78,15 @@ async def test_reset_agent_binds_backend_to_session(monkeypatch) -> None:
     assert backend.session_id == created.session_id
     assert backend.manifest == sorted(manifest)
     assert captured["accession"] == "ACC1"
+    assert captured["tools"] == []  # no client flags negotiated ⇒ no raise_flag
+
+    server.client_rad_caps = {"profileVersion": "0.1", "flags": True}
+    server._reset_agent(created.session_id)
+    assert [t.name for t in captured["tools"]] == ["raise_flag"]  # type: ignore[union-attr]
+
+
+def test_agent_is_level_2() -> None:
+    assert AGENT_RAD_CAPS["flags"] is True
 
 
 def test_on_connect_wraps_the_connection_with_clinical_verbs() -> None:
