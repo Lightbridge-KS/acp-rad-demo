@@ -6,7 +6,7 @@ read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridg
 # ACP-Rad PoC — System & OOP Architecture
 
 > Source: this repo (as built through slice 4) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 5–7, marked *planned*) · Type: Application
-> See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-poc.md`](../progress/overview-poc.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
+> See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Data Architecture](./05-data-architecture.md) · [ACP wire shape](../protocol/01-acp-shape.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-poc.md`](../progress/overview-poc.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
 
 ## 1. Overview
 

@@ -22,7 +22,7 @@ _playground/
 _temp/
 
 # Runtime artifacts
-audit/
+/audit/
 *.log
 
 # OS / editors
