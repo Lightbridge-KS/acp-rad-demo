@@ -20,6 +20,8 @@ type Props = {
   onUserChange?: (quill: Quill, change: Delta) => void;
   /** Overlay UI (hunk controls) rendered above the editor; receives a tick that changes on every text-change. */
   overlay?: (quill: Quill, tick: number) => ReactNode;
+  /** A final report: Quill drops user edits (design 02 §5.2); `api` changes still apply. */
+  readOnly?: boolean;
 };
 
 /**
@@ -27,7 +29,7 @@ type Props = {
  * Quill owns the DOM inside the container; React never re-renders it. Re-mount with a
  * `key` to load a different report.
  */
-export function ReportEditor({ initialOps, onReady, onUserChange, overlay }: Props) {
+export function ReportEditor({ initialOps, onReady, onUserChange, overlay, readOnly = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -78,8 +80,12 @@ export function ReportEditor({ initialOps, onReady, onUserChange, overlay }: Pro
     };
   }, []);
 
+  useEffect(() => {
+    quill?.enable(!readOnly);
+  }, [quill, readOnly]);
+
   return (
-    <div className="relative flex h-full flex-col">
+    <div className={`relative flex h-full flex-col ${readOnly ? "report-final" : ""}`}>
       <div ref={containerRef} className="report-editor flex h-full flex-col" />
       {quill && overlay ? <div className="pointer-events-none absolute inset-0">{overlay(quill, tick)}</div> : null}
     </div>

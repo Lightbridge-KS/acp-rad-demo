@@ -39,3 +39,9 @@ body,
   text-decoration: underline wavy #e11d48;
   text-decoration-skip-ink: none;
 }
+
+/* A final report: locked for everyone; the agent's writes are refused (-32003). */
+.report-final .ql-editor {
+  background: #f9fafb;
+  color: #374151;
+}

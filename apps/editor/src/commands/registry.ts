@@ -6,7 +6,7 @@
  * `runEditorCommand` is pure: it turns a command into an *effect* over canonical Markdown that
  * `apply.ts` performs on the live Quill buffer. Nothing in this file touches Quill or React.
  */
-import type { ProfileLevel, SectionId } from "acp-rad";
+import type { ProfileLevel, ReportStatus, SectionId } from "acp-rad";
 import { foldInShortPrelim, instantiateTemplate, isBlankBuffer, regionSnippetId, shortPrelimDocument, templateIdFor } from "./document.ts";
 import type { CaseMeta } from "./meta.ts";
 import { placeSnippet } from "./snippet.ts";
@@ -43,6 +43,8 @@ export type CommandContext = {
   /** Agent level; `undefined` while disconnected. Level 0 skills are the host user's — hidden. */
   level: ProfileLevel | undefined;
   skills: readonly SkillCommand[];
+  /** A `final` report takes no editor command (the buffer is locked); skills stay — `/qa` is legitimate. */
+  status: ReportStatus;
 };
 
 export type CommandGroups = { suggested: Command[]; editor: Command[]; skills: Command[] };
@@ -50,7 +52,8 @@ export type CommandGroups = { suggested: Command[]; editor: Command[]; skills: C
 export const GROUP_LABEL: Record<keyof CommandGroups, string> = { suggested: "Suggested", editor: "Editor", skills: "Skills" };
 
 export function listCommands(ctx: CommandContext): CommandGroups {
-  const editor = [...EDITOR_COMMANDS];
+  // `suggested` draws from `all`, so an empty editor list also keeps editor commands out of it.
+  const editor = ctx.status === "final" ? [] : [...EDITOR_COMMANDS];
   const skills: Command[] = ctx.level === 0 ? [] : ctx.skills.map((s) => ({ id: s.name, kind: "skill", description: s.description, ...(s.hint ? { hint: s.hint } : {}) }));
   const all = [...editor, ...skills];
   const byId = (id: string) => all.find((c) => c.id === id);

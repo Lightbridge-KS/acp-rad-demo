@@ -29,7 +29,14 @@ import {
 } from "acp-rad";
 import type { AuditLog } from "../audit/log.ts";
 import { fingerprint } from "../audit/log.ts";
+import { isQaPrompt } from "../report/lifecycle.ts";
 import type { PermissionOption, Proposal, ProposalStore } from "../report/proposals.ts";
+
+/**
+ * Why the editor refuses an agent write outright (no proposal, no decision): the report is
+ * `final` (design 02 §5.2), or the running turn is `/qa`, which never edits (04 §3.5).
+ */
+export type RefuseReason = "final" | "qa";
 
 export const CLIENT_INFO = { name: "acp-rad-editor", version: "0.1.0" } as const;
 
@@ -72,9 +79,12 @@ export type AgentHandle = {
   level: ProfileLevel;
   model?: string;
   manifest: string[];
+  /** One turn at a time: throws if a turn is already running. */
   prompt: (text: string) => Promise<acp.PromptResponse>;
   cancel: () => Promise<void>;
   close: () => void;
+  /** Whether an agent edit would be refused right now — the editor must not render one as a proposal either. */
+  refuseReason: () => RefuseReason | null;
 };
 
 /** Run a ReportStore operation, translating profile errors to JSON-RPC errors on the wire. */
@@ -96,6 +106,9 @@ export async function connectAgent(
   events: AgentEvents,
 ): Promise<AgentHandle> {
   const stream = createWebSocketStream(url);
+  /** The prompt text of the turn in flight (`session/prompt` sent, response pending). */
+  let activeTurn: string | null = null;
+  const refuseReason = (): RefuseReason | null => (store.reportStatus() === "final" ? "final" : isQaPrompt(activeTurn) ? "qa" : null);
   const conn = acp
     .client({ name: CLIENT_INFO.name })
     .onNotification(acp.methods.client.session.update, (ctx) => events.onUpdate(ctx.params.update))
@@ -112,9 +125,10 @@ export async function connectAgent(
     })
     .onRequest(acp.methods.client.fs.writeTextFile, async (ctx) => {
       const { path, content } = ctx.params;
-      if (store.reportStatus() === "final") {
-        audit.record("fs.write.refused", { path, outcome: "final" });
-        throw new acp.RequestError(RAD_ERRORS.FORBIDDEN, "report is final");
+      const reason = refuseReason();
+      if (reason) {
+        audit.record("fs.write.refused", { path, outcome: reason });
+        throw new acp.RequestError(RAD_ERRORS.FORBIDDEN, reason === "qa" ? "no edits during /qa — raise a flag instead" : "report is final");
       }
       guarded(() => store.assertWritable(path));
       const hash = fingerprint(content);
@@ -158,9 +172,17 @@ export async function connectAgent(
         .filter((o) => o.kind !== "allow_always" && o.kind !== "reject_always") // INV-1
         .map((o) => ({ optionId: o.optionId, name: o.name, kind: o.kind }));
       audit.record("permission.request", { toolCallId: requestId });
+      const raw = (ctx.params.toolCall.rawInput ?? {}) as { file_path?: string; old_string?: string; new_string?: string; content?: string };
+      // A final report, or a /qa turn: the edit is refused before anyone is asked — the editor
+      // answers the agent's own `reject` option so its loop resumes and the turn ends normally.
+      const reason = refuseReason();
+      if (reason) {
+        const reject = ctx.params.options.find((o) => o.kind === "reject_once");
+        audit.record("permission.refused", { toolCallId: requestId, ...(raw.file_path ? { path: raw.file_path } : {}), outcome: reason });
+        return reject ? { outcome: { outcome: "selected" as const, optionId: reject.optionId } } : { outcome: { outcome: "cancelled" as const } };
+      }
       // deepagents-acp mints a fresh id for the interrupt; fall back to matching the pending
       // proposal by the tool's raw input (path + old/new snippets).
-      const raw = (ctx.params.toolCall.rawInput ?? {}) as { file_path?: string; old_string?: string; new_string?: string; content?: string };
       const proposal =
         proposals.get(requestId) ??
         (raw.file_path ? proposals.matchPending(raw.file_path, raw.old_string, raw.new_string ?? raw.content) : undefined);
@@ -229,16 +251,24 @@ export async function connectAgent(
     level,
     model,
     manifest,
-    prompt: (text) =>
-      conn.agent.request(acp.methods.agent.session.prompt, {
-        sessionId,
-        prompt: [{ type: "text", text }],
-      }),
+    prompt: async (text) => {
+      if (activeTurn !== null) throw new Error("a turn is already running");
+      activeTurn = text;
+      try {
+        return await conn.agent.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: "text", text }],
+        });
+      } finally {
+        activeTurn = null;
+      }
+    },
     cancel: async () => {
       proposals.cancelAll(); // ACP: in-flight permission requests must be answered `cancelled`
       await conn.agent.notify(acp.methods.agent.session.cancel, { sessionId });
       audit.record("session.cancel");
     },
     close: () => conn.close(),
+    refuseReason,
   };
 }

@@ -210,8 +210,11 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
     connectAgent(BRIDGE_URL, fixture.session, store, proposals, audit, {
       onUpdate: (u) => {
         dispatch({ type: "update", update: u });
-        // A diff on an edit tool call becomes a proposal the moment it arrives (before the permission request).
-        if ((u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") && !proposals.get(u.toolCallId)) {
+        // A diff on an edit tool call becomes a proposal the moment it arrives (before the permission
+        // request) — unless the editor will refuse the write anyway (final report, /qa turn): then
+        // nothing is rendered and `request_permission` answers reject (connection.ts).
+        const refused = statusRef.current === "final" || agentRef.current?.refuseReason() !== null;
+        if (!refused && (u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") && !proposals.get(u.toolCallId)) {
           const diff = diffOf(u.content);
           if (diff) {
             const p = safe(() => proposals.fromDiff(u.toolCallId, diff, store.read(diff.path)));
@@ -391,8 +394,9 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       hasPriors: Object.keys(fixture.priors).length > 0,
       level: header.status === "ready" ? header.level : undefined,
       skills: state.commands,
+      status,
     };
-  }, [store, quill, shortPrelim, fixture, header.status, header.level, state.commands]);
+  }, [store, quill, shortPrelim, fixture, header.status, header.level, state.commands, status]);
   const commands = useCallback((): CommandGroups => listCommands(commandContext()), [commandContext]);
 
   const runCommand = useCallback(
@@ -414,6 +418,10 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
         return;
       }
       if (!quill || !store) return;
+      if (status === "final") {
+        setHint("the report is final — no edits");
+        return;
+      }
       const effect = runEditorCommand(command.id, arg, {
         markdown: store.reportMarkdown(),
         meta: fixture.meta,
@@ -447,7 +455,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       }
       setUnreviewedCount(unreviewedLineCount(currentOps(quill)));
     },
-    [agentPort, state.isRunning, audit, quill, store, fixture, shortPrelim, proposals, renderProposal],
+    [agentPort, state.isRunning, audit, quill, store, status, fixture, shortPrelim, proposals, renderProposal],
   );
 
   const decide = useCallback((toolCallId: string, hunkId: string, verb: Verb) => proposals.decide(toolCallId, hunkId, verb), [proposals]);
@@ -574,6 +582,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
         <ReportEditor
           key={fixture.id}
           initialOps={initialOps}
+          readOnly={status === "final"}
           onReady={setQuill}
           onUserChange={(q) => {
             setUnreviewedCount(unreviewedLineCount(currentOps(q)));

@@ -76,7 +76,7 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
     convertMessage,
     onNew: async (m: AppendMessage) => {
       const text = m.content.map((p) => (p.type === "text" ? p.text : "")).join("");
-      if (!agent || !text.trim()) return;
+      if (!agent || !text.trim() || state.isRunning) return; // one turn at a time
       dispatch({ type: "user", text });
       await agent.prompt(text);
     },

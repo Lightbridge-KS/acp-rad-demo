@@ -17,10 +17,18 @@ const ctx = (over: Partial<CommandContext> = {}): CommandContext => ({
   hasPriors: false,
   level: 1,
   skills: SKILLS,
+  status: "draft",
   ...over,
 });
 
 describe("listCommands", () => {
+  it("offers no editor command on a final report, not even as a suggestion; skills stay", () => {
+    const g = listCommands(ctx({ status: "final", caretSection: "impression", caretAtEnd: true }));
+    expect(g.editor).toEqual([]);
+    expect(g.suggested.map((c) => c.id)).toEqual(["impression"]);
+    expect(g.skills.map((c) => c.id)).toEqual(["impression", "compare"]);
+  });
+
   it("suggests /template (and /short-prelim) on a blank buffer", () => {
     const g = listCommands(ctx({ blank: true }));
     expect(g.suggested.map((c) => c.id)).toEqual(["template", "short-prelim"]);
