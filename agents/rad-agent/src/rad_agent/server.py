@@ -3,21 +3,31 @@
 Profile additions ride in ``_meta.rad`` (ACP v1 has no other extension slot):
 
 - ``initialize`` result advertises the agent's rad capabilities (Level 1 by presence).
-- ``session/new`` binds the session to an accession from the client's ``_meta.rad``.
+- ``session/new`` binds the session to an accession from the client's ``_meta.rad`` and
+  advertises the skills (``available_commands_update``, design 04 §1).
+- ``session/prompt`` expands ``/skill [arg]`` into the skill's authored text.
 - ``_rad/*`` extension methods are routed to ``ext_method`` (none implemented yet).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from acp.exceptions import RequestError
+from acp.helpers import update_available_commands
 from acp.schema import (
+    AudioContentBlock,
     ClientCapabilities,
+    EmbeddedResourceContentBlock,
+    ImageContentBlock,
     Implementation,
     InitializeResponse,
     NewSessionResponse,
+    PromptResponse,
+    ResourceContentBlock,
+    TextContentBlock,
 )
 from deepagents_acp.server import AgentServerACP, AgentSessionContext
 from langgraph.graph.state import CompiledStateGraph
@@ -27,6 +37,7 @@ from rad_agent.agent import build_agent
 from rad_agent.backend import AcpClientBackend
 from rad_agent.config import model_spec
 from rad_agent.permissions import PermissionRewritingClient
+from rad_agent.skills import Skill, advertise, expand, load_skills
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +83,8 @@ class RadReportAgentServer(AgentServerACP):
         self.session_rad: dict[str, dict[str, Any]] = {}
         self.client_rad_caps: dict[str, Any] | None = None
         self._current_session_id: str | None = None
+        self.skills: dict[str, Skill] = load_skills()
+        self._background: set[asyncio.Task[None]] = set()
 
     def on_connect(self, conn: Any) -> None:
         """Wrap the connection so permission requests carry the clinical verbs."""
@@ -133,7 +146,49 @@ class RadReportAgentServer(AgentServerACP):
             cwd,
             rad.get("accession") if rad else None,
         )
+        self._advertise_skills(response.session_id)
         return response
+
+    def _advertise_skills(self, session_id: str) -> None:
+        """Send ``available_commands_update`` once the ``session/new`` response is on its way.
+
+        Scheduled as a task so the response precedes the notification for strict clients.
+        Tests may construct the server without a connection — then there is nobody to tell.
+        """
+        conn = getattr(self, "_conn", None)
+        send = getattr(conn, "session_update", None)
+        if send is None or not self.skills:
+            return
+        update = update_available_commands(advertise(self.skills))
+        task = asyncio.create_task(send(session_id=session_id, update=update))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def prompt(  # type: ignore[override]  # deepagents-acp and acp.Agent order the params differently; the router passes keywords
+        self,
+        prompt: list[
+            TextContentBlock
+            | ImageContentBlock
+            | AudioContentBlock
+            | ResourceContentBlock
+            | EmbeddedResourceContentBlock
+        ],
+        session_id: str,
+        message_id: str | None = None,
+        **kwargs: Any,
+    ) -> PromptResponse:
+        """A ``/skill [arg]`` prompt becomes the skill's authored text; anything else passes."""
+        blocks = list(prompt)
+        for i, block in enumerate(blocks):
+            if isinstance(block, TextContentBlock):
+                expanded = expand(block.text, self.skills)
+                if expanded != block.text:
+                    log.info("skill %s expanded (%d chars)", block.text.split()[0], len(expanded))
+                    blocks[i] = block.model_copy(update={"text": expanded})
+                break
+        return await super().prompt(
+            prompt=blocks, session_id=session_id, message_id=message_id, **kwargs
+        )
 
     async def ext_method(self, name: str, payload: dict[str, Any]) -> Any:
         """Handle ``_``-prefixed requests. Nothing implemented yet (slice 5 adds rad tools)."""
