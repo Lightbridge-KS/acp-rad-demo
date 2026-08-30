@@ -3,9 +3,10 @@
  * unstyled primitives, styled with Tailwind. It MIRRORS decisions — the permission is
  * decided in the report — so no `onRespondToToolApproval` is supplied (load-bearing).
  *
- * The composer's `/` opens the same command registry as the editor (assistant-ui's trigger
- * popover, unstable API, pinned 0.15.17): editor commands run through `onCommand`, skills are
- * sent as `/name`; a skill with an argument hint is only typed into the composer.
+ * The composer's `/` lists the agent's **skills only** (assistant-ui's trigger popover,
+ * unstable API, pinned 0.15.17): the chat box is the agent's channel, so a deterministic
+ * editor command never runs from it (KS, 2026-08-30 — those live in `Commands ▾` and the
+ * in-report `/`). A skill is sent as `/name`; one with an argument hint is only typed in.
  */
 import {
   AssistantRuntimeProvider,
@@ -43,9 +44,9 @@ type Props = {
   header: HeaderState;
   agent: AgentPort | null;
   audit: AuditRecord[];
-  /** The command registry for the composer's `/` menu. */
+  /** The command registry; the composer's `/` menu shows its Skills group only. */
   commands?: () => CommandGroups;
-  /** Run a command picked in the composer (editor commands and argument-less skills). */
+  /** Run an argument-less skill picked in the composer. */
   onCommand?: (command: Command) => void;
 };
 
@@ -126,11 +127,8 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
 function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
   const aui = useAui();
   const groups = commands?.() ?? EMPTY_GROUPS;
-  // One item per (group, command): a command may sit in Suggested and in its own group.
-  const entries = useMemo(
-    () => (Object.keys(GROUP_LABEL) as (keyof CommandGroups)[]).flatMap((g) => groups[g].map((c) => ({ id: `${g}:${c.id}`, group: g, command: c }))),
-    [groups],
-  );
+  // Skills only: editor commands are not chat (design 02 §2.2).
+  const entries = useMemo(() => groups.skills.map((c) => ({ id: c.id, command: c })), [groups]);
   const slash = unstable_useSlashCommandAdapter({
     removeOnExecute: true,
     commands: entries.map(({ id, command: c }) => ({
@@ -144,9 +142,8 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
       },
     })),
   });
-  const groupOf = (itemId: string): keyof CommandGroups | undefined => itemId.split(":")[0] as keyof CommandGroups | undefined;
-  // assistant-ui's search matches descriptions too; rank by id first so `/impression` never
-  // resolves to a snippet that mentions the impression head, and show each command once.
+  // assistant-ui's search matches descriptions too; rank by id first so a skill named in the
+  // query always comes before one that merely mentions it.
   const adapter = useMemo(
     () => ({
       ...slash.adapter,
@@ -175,14 +172,10 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
           <ComposerPrimitive.Unstable_TriggerPopover.Action {...slash.action} />
           <ComposerPrimitive.Unstable_TriggerPopoverItems>
             {(items) => {
-              let lastGroup: string | undefined;
               return items.map((item, index) => {
-                const g = groupOf(item.id);
-                const header = g && g !== lastGroup ? GROUP_LABEL[g] : null;
-                lastGroup = g ?? lastGroup;
                 return (
                   <div key={item.id}>
-                    {header && <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{header}</div>}
+                    {index === 0 && <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{GROUP_LABEL.skills}</div>}
                     <ComposerPrimitive.Unstable_TriggerPopoverItem
                       item={item}
                       index={index}

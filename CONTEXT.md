@@ -124,7 +124,7 @@ The invariant that the radiologist's typing never blocks and is never overwritte
 ## Commands
 
 **Command**:
-A named action invoked by `/name` from the Commands menu, the in-report `/` menu, or the sidebar composer. Two kinds: editor command and skill.
+A named action invoked by `/name` from the Commands menu or the in-report `/` menu; a skill can also be invoked from the sidebar composer, an editor command never can — the chat box is the agent's channel. Two kinds: editor command and skill.
 
 **Editor command**:
 A deterministic command the editor performs itself, instantly, without the agent. Two classes: document command and snippet command.

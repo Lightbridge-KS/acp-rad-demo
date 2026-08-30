@@ -58,7 +58,7 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 | Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions behind the QA gate (04 §3.5); `final` locks writes. |
 | `Commands ▾` (toolbar) | The full command list, grouped. |
 | `/` in the report | Notion-style menu at the caret (`/` at a line start or after whitespace); a typed query becomes one ranked *Matches* list; `/name arg` passes an argument. |
-| Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with `/` menu; Send / Stop. |
+| Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with a `/` menu of **skills only**; Send / Stop. |
 | Sidebar · Audit | Live audit trail. |
 | Flag card | `_rad/flag` acknowledgement — the one decision the sidebar owns. *planned* (slice 5) |
 | Worklist | 4 synthetic cases. *planned* (slice 6); until then the `?case=<id>` URL parameter (`ct-brain-er-stroke` default, `ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`). |
@@ -67,7 +67,7 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 
 ```mermaid
 flowchart TD
-    root["/ — one registry, three surfaces: Commands ▾ · in-report / · composer /"]
+    root["/ — one registry, three surfaces: Commands ▾ · in-report / · composer / (skills only)"]
     root --> sug["Suggested — context-aware (caret section, blank buffer, priors present)"]
     root --> ed["Editor — deterministic, never touches the agent"]
     root --> sk["Skills — advertised by the agent, result = proposal"]
@@ -88,7 +88,7 @@ flowchart TD
 | `/proofread [section]` | skill | Wording and house style, plus consistency (laterality, size, count between FINDINGS and IMPRESSION — fix proposed on the IMPRESSION side). Spec: [04 §3.3](./04-skills.md). | one proposal per section that needs a fix |
 | `/qa` *(slice 5)* | skill | Reads the report, raises flags — `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` — as cards; no edit. Also run by the QA gate at Prelim / Sign off. Spec: [04 §3.5](./04-skills.md). | `_rad/flag` |
 
-Rules: editor commands insert **instantly** with source `user` (⌘Z undoes; audited as `command.<id>`) — the radiologist's invocation *is* INV-1's explicit act. Snippets are **home-anchored**: wherever the menu was summoned, the text lands at its home and scrolls into view. Skills from a Level 0 agent are not shown (they list the host user's personal skills).
+Rules: the composer's `/` lists skills only — the chat box is the agent's channel, and a deterministic edit of the report must not come out of it (KS, 2026-08-30); editor commands live in `Commands ▾` and the in-report `/`. Editor commands insert **instantly** with source `user` (⌘Z undoes; audited as `command.<id>`) — the radiologist's invocation *is* INV-1's explicit act. Snippets are **home-anchored**: wherever the menu was summoned, the text lands at its home and scrolls into view. Skills from a Level 0 agent are not shown (they list the host user's personal skills).
 
 ### 2.3 The agent's surface (AX)
 

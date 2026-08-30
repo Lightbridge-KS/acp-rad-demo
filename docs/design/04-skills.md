@@ -32,7 +32,7 @@ sequenceDiagram
 | Advertisement | `RadReportAgentServer.new_session` → `session/update { availableCommands }` | Sent once per session, right after `session/new` returns. `name` (no slash), `description` (one line), `input.hint` when the skill takes an argument. |
 | Expansion | `RadReportAgentServer.prompt` | If the prompt's text matches `^/(?<name>[a-z][a-z-]*)(\s+(?<arg>.+))?$` and `name` is a known skill, the text is replaced by the skill file's body with `{arg}` substituted (empty when absent). Anything else passes through untouched. |
 | Authored content | `agents/rad-agent/src/rad_agent/prompts/skills/<name>.md` | One file per skill: YAML frontmatter `description`, optional `hint`; body = the expansion text. The advertisement is built from this folder — adding a skill is adding a file. |
-| Rendering | editor **Skills** group | Hidden for Level 0 agents (their list is the host user's personal skills). The editor audits the invocation as `command.<name>` with `outcome: skill`. |
+| Rendering | editor **Skills** group — the only group the sidebar composer's `/` shows | Hidden for Level 0 agents (their list is the host user's personal skills). The editor audits the invocation as `command.<name>` with `outcome: skill`. |
 | Focus | — | Not used in slice 4 (`focusState: false`). A skill that needs scope takes it as `{arg}`; caret focus may replace the argument later. |
 
 Why expansion and not deepagents `skills=`: the agent's backend is the editor, which cannot serve `SKILL.md` folders; routing them needs a `CompositeBackend` (03 §9). Expansion keeps skills authored, versioned with the agent, and testable by reading one file.

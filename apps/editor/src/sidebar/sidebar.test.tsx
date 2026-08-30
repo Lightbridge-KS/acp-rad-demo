@@ -104,7 +104,7 @@ describe("Sidebar", () => {
     expect(screen.queryByTestId("stopped")).toBeNull();
   });
 
-  it("composer / lists the registry and runs the picked command", async () => {
+  it("composer / lists skills only and runs the picked one — editor commands are not chat", async () => {
     const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
     const onCommand = vi.fn();
     const groups: CommandGroups = {
@@ -117,12 +117,13 @@ describe("Sidebar", () => {
     fireEvent.change(input, { target: { value: "/" } });
     input.setSelectionRange(1, 1);
     fireEvent.select(input);
-    const item = await screen.findByText("/template");
+    const item = await screen.findByText("/impression");
+    expect(screen.queryByText("/template")).toBeNull();
     await act(async () => {
       fireEvent.click(item);
     });
-    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({ id: "template" }));
-    expect(agent.prompt).not.toHaveBeenCalled();
+    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({ id: "impression", kind: "skill" }));
+    expect(onCommand).not.toHaveBeenCalledWith(expect.objectContaining({ id: "template" }));
   });
 });
 
