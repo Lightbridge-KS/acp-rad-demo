@@ -1,6 +1,6 @@
 ---
-summary: How to install, run, test, and switch LLM providers for the ACP-Rad Demo (bridge + editor + rad-agent).
-read_when: Starting the app, running gates, changing RAD_MODEL, or debugging the transport chain.
+summary: How to install, run, containerize, test, and switch LLM providers for the ACP-Rad Demo (bridge + editor + rad-agent).
+read_when: Starting or deploying the app, running gates, changing RAD_MODEL, or debugging the transport chain.
 ---
 
 # Running the demo
@@ -28,6 +28,40 @@ browser editor ──ws frames──► bridge ──ndjson lines──► agent
 ```
 
 Agent logs go to **stderr** (shown in the bridge's terminal); stdout is the JSON-RPC wire.
+
+## Docker Compose
+
+The root `Dockerfile` has two final targets: `editor` builds the Vite app and serves it from
+nginx; `bridge` combines Node 26 with the locked Python 3.13 rad-agent environment because the
+bridge spawns one agent subprocess per WebSocket. `compose.yaml` runs both:
+
+```sh
+cp .env.example .env      # add the provider configuration you use
+just up                    # docker compose up --build
+# open http://127.0.0.1:8080
+just down                  # containers/network removed; audit volume retained
+```
+
+nginx serves one browser origin: `/` is the static editor and `/acp` is upgraded and proxied
+to `bridge:8787`. The editor derives `ws://` or `wss://` from `window.location`; the native
+Vite server proxies the same path during `just dev`. `VITE_BRIDGE_URL` remains an escape hatch.
+
+Compose publishes the app to `127.0.0.1:8080` by default and the bridge to loopback port 8787
+only for the repository smoke client. Override `APP_PORT` or `BRIDGE_HOST_PORT` if those ports
+are occupied. For a Tailscale-only demo, bind the app to that machine's Tailscale address:
+
+```sh
+APP_HOST=<tailscale-ip> just up
+```
+
+There is **no authentication, TLS termination, or rate limiting**. Keep this deployment on
+localhost or behind Tailscale; it is not a public-Internet deployment. The container registry
+contains only `rad-agent`; the deferred Level 0 Claude/Gemini agents are intentionally absent.
+
+Provider variables are read from `.env` and explicitly passed to the bridge. For Ollama on the
+Docker host, use `RAD_MODEL_BASE_URL=http://host.docker.internal:11434/v1` rather than
+`localhost`. Audit JSONL is stored in the named `audit-data` volume and survives `just down`;
+`docker compose down -v` is the explicit destructive reset.
 
 ## Model / provider
 
@@ -58,9 +92,12 @@ RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just d
 ```sh
 just check            # dry: tsc, vitest, ruff, mypy, pytest
 just smoke            # live: starts the bridge, runs a headless ACP client end-to-end (needs an LLM)
+```
 
 `just smoke` starts its own bridge on 8787 — stop `just dev` first, or run `cd apps/bridge && node scripts/smoke.ts` against the running bridge (which already carries the key). Stage 2 of the smoke opens a second session on `ct-chest-er-nodule-prior` and checks the skills advertisement and `/compare`.
-```
+
+Against Compose, keep the services running and use the second form: port 8787 is published only
+on loopback for this purpose.
 
 ## Slides
 

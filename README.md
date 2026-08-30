@@ -93,6 +93,19 @@ Offline, no key, via Ollama:
 RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just dev
 ```
 
+Containerized, with only Docker Desktop plus a model provider:
+
+```sh
+cp .env.example .env      # add a provider key, or configure Ollama as noted in the file
+just up                    # editor + nginx on http://127.0.0.1:8080
+# another terminal, when finished:
+just down                  # keeps the persistent audit volume
+```
+
+The container serves the editor and `/acp` from one browser origin; no bridge URL is baked
+into the image. It is safe-by-default on loopback and can be bound to a Tailscale address for
+a private demo. See [`docs/dev/running.md`](docs/dev/running.md#docker-compose).
+
 Model and provider options, tracing, and troubleshooting: [`docs/dev/running.md`](docs/dev/running.md).
 
 ## Try it
@@ -123,6 +136,9 @@ apps/editor        Vite + React 19 + TypeScript + QuillJS 2 + Tailwind 4 — the
 apps/bridge        Node + ws — WebSocket ⇄ stdio launcher for ACP agents (agents.json).
 agents/rad-agent   Python 3.13 (uv) — deepagents-acp subclass; the ACP agent. stdout is the wire.
 packages/acp-rad   TypeScript, framework-free — the profile as code (zod schemas, section ids, error codes).
+Dockerfile         Multi-target build: nginx editor image + Node/Python bridge image.
+compose.yaml       Local or Tailscale-only deployment; model env + persistent audit volume.
+docker/            nginx reverse proxy + rad-agent-only container registry.
 docs/              design · protocol · adr · progress · dev · ideas
 CONTEXT.md         The glossary — every name in the code and UI comes from here.
 ```
@@ -132,6 +148,8 @@ CONTEXT.md         The glossary — every name in the code and UI comes from her
 ```sh
 just check     # dry gates: tsc, vitest, ruff, mypy, pytest
 just smoke     # live gate: headless ACP client end-to-end through the bridge (needs an LLM)
+just up        # build and run the containerized demo
+just down      # stop it; retain the audit volume
 ```
 
 Conventions: ACP **v1**; profile extensions only in `_meta.rad` and `_rad/*`; house
@@ -161,7 +179,8 @@ switching) are done. Known limits:
   client driving `rad-agent`, and a Level 0 agent completing a scenario against the
   unchanged editor, are both deferred.
 - Proposals are line-level hunks (ADR 0002); one-word edits strike and reinsert the line.
-- No persistence beyond the fixtures and the audit log; no authentication; localhost only.
+- No persistence beyond the fixtures and the audit log; no authentication, TLS termination,
+  or rate limiting. Keep it on localhost or behind Tailscale — never expose it publicly.
 
 ## Acknowledgements
 

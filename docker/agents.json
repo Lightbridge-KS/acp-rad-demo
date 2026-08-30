@@ -1,0 +1,6 @@
+{
+  "rad": {
+    "cmd": "/app/agents/rad-agent/.venv/bin/rad-agent",
+    "args": []
+  }
+}

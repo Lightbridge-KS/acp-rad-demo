@@ -10,6 +10,7 @@
 import type Quill from "quill";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type ReactNode, type Ref } from "react";
 import { canonicalLines, markdownToDelta, resolvePath, sectionIdOfLine, type AuditRecord, type FlagParams, type ReportStatus, type SectionId } from "acp-rad";
+import { defaultBridgeUrl } from "./agent/bridgeUrl.ts";
 import { connectAgent, type AgentHandle } from "./agent/connection.ts";
 import { AuditLog } from "./audit/log.ts";
 import { applyEffect } from "./commands/apply.ts";
@@ -31,7 +32,7 @@ import { Sidebar, type AgentPort, type HeaderState } from "./sidebar/Sidebar.tsx
 import { diffOf, initialSidebarState, sidebarReducer } from "./sidebar/store.ts";
 
 const BRIDGE_URL: string =
-  (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? "ws://localhost:8787/acp?agent=rad";
+  (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? defaultBridgeUrl(window.location);
 
 /** What a worklist switch would discard — read by the shell at click time. */
 export type Dirty = { pending: number; unreviewed: number; running: boolean; flags: number };

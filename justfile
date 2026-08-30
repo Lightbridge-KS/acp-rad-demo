@@ -24,6 +24,14 @@ bridge:
 editor:
     pnpm --filter editor dev
 
+# Build and run the containerized demo (editor at http://127.0.0.1:8080 by default)
+up:
+    docker compose up --build
+
+# Stop the containerized demo; the audit volume is retained
+down:
+    docker compose down
+
 # Run the rad-agent on stdio (for manual JSON-RPC poking)
 agent:
     uv run --project {{agent_dir}} rad-agent
