@@ -5,7 +5,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 
 # ACP-Rad Demo — Surface Architecture (UX · AX)
 
-> Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 5) + Design (*planned* = slice 6+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
+> Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 6) + Design (*planned* = slice 7) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)
 
 ## Cheat Sheet
@@ -20,7 +20,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 | Clear amber (unreviewed) text | edit the line, or **Mark all reviewed** |
 | Compare with the prior | `/compare` |
 | Mark attending review | `/er-reviewed` · `/er-not-reviewed` |
-| Check before issuing | `/qa` → flag cards + marked lines, Acknowledge in the sidebar (built, slice 5); **Prelim** / **Sign off** run it as the QA gate — *planned* (slice 6) |
+| Check before issuing | `/qa` → flag cards + marked lines, Acknowledge in the sidebar (built, slice 5); **Prelim** / **Sign off** run it as the QA gate (built, slice 6) |
 | Stop the agent | **Stop** in the sidebar |
 | See what happened | sidebar **Audit** tab (same records as `audit/{accession}.jsonl`) |
 
@@ -55,13 +55,15 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 | Report (Quill) | Types freely, always. Bold/italic/lists only. Undo covers own edits only. |
 | Change pill | Decides one change (a hunk): Accept (lands plain) · Accept for review (lands amber) · Reject. |
 | Header counters | Bulk decide pending changes; clear all unreviewed text; open-flag count. |
-| Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions behind the QA gate (04 §3.5); `final` locks writes. |
+| Status pill | Shows `draft · short prelim` / `preliminary` / `final` and the transitions the role may take — **Prelim** (resident, draft → preliminary) or **Sign off** (attending, draft \| preliminary → final) — each behind the QA gate (04 §3.5); the gate panel under the header reports *refused* (blockers + *show*), *checking*, *n flags* ([Review] [… anyway]) or *QA unavailable* ([… anyway]). `final` greys the report, drops user edits and every editor command, and refuses agent writes. (built, slice 6) |
+| Role toggle | *resident* \| *attending* in the header — display-only (02 §5.2) except that it picks the pill's action and stamps `actor.role` on audit records. (built, slice 6) |
+| Model select | In the sidebar's agent line when the agent advertises a `model` config option: switches the session's model through `session/set_config_option` (plain ACP); disabled while a turn runs. (built, slice 6) |
 | `Commands ▾` (toolbar) | The full command list, grouped. |
 | `/` in the report | Notion-style menu at the caret (`/` at a line start or after whitespace); a typed query becomes one ranked *Matches* list; `/name arg` passes an argument. |
 | Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with a `/` menu of **skills only**; Send / Stop. |
 | Sidebar · Audit | Live audit trail. |
 | Flag card | Open flags in a strip above the thread (Chat tab): kind badge · summary · `section · line n` · **Acknowledge** — the one decision the sidebar owns; clicking the card scrolls the report to the marked line. The mark (`ai-flag`) lives on the line until acknowledged and moves with it. (built, slice 5) |
-| Worklist | 4 synthetic cases. *planned* (slice 6); until then the `?case=<id>` URL parameter (`ct-brain-er-stroke` default, `ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`). |
+| Worklist | A `<select>` at the head of the header over the 5 synthetic cases (`ct-brain-er-stroke` default, `ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`, `ct-wa-er-stone`); `?case=<id>` deep-links and stays in sync. Switching remounts the workspace (new stores, new session); when it would discard pending changes, unreviewed lines, open flags or a running turn, an inline banner asks first ([Switch] [Stay]). Nothing persists across cases. (built, slice 6) |
 
 ### 2.2 Commands
 
@@ -179,14 +181,14 @@ All hunks decided ⇒ the permission is answered once: any *Accept for review* �
 ```mermaid
 stateDiagram-v2
     [*] --> draft
-    draft --> preliminary: Prelim (slice 6)
-    preliminary --> final: Sign off (slice 6)
+    draft --> preliminary: Prelim (resident)
+    preliminary --> final: Sign off (attending)
     draft --> final: Sign off (attending)
     note right of draft: shortPrelim may be true while draft
     note right of final: write-lock — every fs/write ⇒ -32003, /qa stays available
 ```
 
-`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. **Prelim** and **Sign off** both pass through the QA gate (04 §3.5; KS, 2026-08-30): a deterministic check (no pending changes, no unreviewed text, no `___` blanks) that refuses, then `/qa` whose flags are advisory — *Sign off anyway* is always available and audited (`qa.passed` · `qa.overridden` · `qa.skipped`). An SP skips the agent gate. Roles (resident: draft/preliminary; attending: also final) are display-only in the PoC.
+`shortPrelim` is set by `/short-prelim` and cleared when the SP is folded into a full skeleton. ER Reviewed / Not Reviewed markers are body text and never move the status. **Prelim** and **Sign off** both pass through the QA gate (04 §3.5; KS, 2026-08-30): a deterministic check (not empty, no pending changes, no unreviewed text, no template blanks `__`) that refuses, then `/qa` whose flags are advisory — *… anyway* is always available and audited (`qa.passed` · `qa.overridden {flagIds}` · `qa.skipped {reason}` · `qa.refused`; then `status.changed`). An SP skips the agent gate. Roles are a header toggle and display-only: the resident sees **Prelim** (draft only), the attending sees **Sign off** (draft or preliminary) — the attending has no Prelim (KS, 2026-08-30; amends the earlier "attending: also final"). Status is per open case and not persisted: a reload or a worklist switch returns to the fixture's value.
 
 ### 5.3 Connection & turn
 
@@ -205,6 +207,7 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 | Knob | Where | Values |
 |---|---|---|
 | Agent | bridge URL `?agent=` (`VITE_BRIDGE_URL` today; URL param *planned*) | `rad` (default) · `claude` · `gemini` — from `apps/bridge/agents.json` |
+| Model | the sidebar's model select → `session/set_config_option` (built, slice 6) | whatever the agent advertises in `session/new.configOptions` (`rad-agent`: `RAD_MODELS`) |
 | Model | `RAD_MODEL`, `RAD_MODEL_BASE_URL`, provider keys | see [`dev/running.md`](../dev/running.md) |
 | Case | `meta.json.demo.default` case; `?case=<id>`; worklist *(slice 6)* | `apps/editor/fixtures/<case>/` |
 | Demo start state | `meta.json.demo.start` | `complete` · `impression_empty` |
@@ -213,4 +216,4 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 
 ## 8. Decisions Needed
 
-- 💡 **`/sign-off`**: an editor command in the same registry (fits "one list, three surfaces") or only an action on the status pill (fits "status transitions are explicit, not commands")? Decide at slice-6 planning; the registry design must not preclude either.
+- ~~**`/sign-off`**: an editor command in the same registry or only an action on the status pill?~~ **Decided (slice 6, 2026-08-30): pill actions only** — status transitions are explicit acts, not commands; the registry is untouched.

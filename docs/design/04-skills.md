@@ -5,7 +5,7 @@ read_when: Adding or changing a skill; writing or reviewing a skill's expansion 
 
 # ACP-Rad Demo — Skills
 
-> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slices 4–5; the QA gate *planned*, slice 6) · Scope: what the agent does when the radiologist invokes a skill
+> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slices 4–6) · Scope: what the agent does when the radiologist invokes a skill
 > See also: [Surface Architecture](./02-surface-architecture.md) §2.2 (the command registry the skills appear in) · [Agentic Architecture](./03-agentic-architecture.md) §5, §9 (the agent's organs; why deepagents `skills=` is out) · Glossary [`CONTEXT.md`](../../CONTEXT.md)
 
 A **skill** is a command the agent advertises and performs; its result is a proposal. In this demo a skill is nothing more than **a named prompt expansion** (built in slice 4; `/qa` is the exception, §3.5): the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
@@ -212,22 +212,25 @@ Two channels, one rule: a proposal may change bytes, a flag may not.
                         └─ _rad/flag ───────────► flag card in the SIDEBAR · nothing changes
 ```
 
-**The QA gate.** When the radiologist clicks **Prelim** or **Sign off** (slice 6), the editor runs two gates in order and owns both; the agent does not know it is being used as a gate — it just receives the literal `/qa` prompt.
+**The QA gate** (built, slice 6 — `report/lifecycle.ts` for the deterministic half, `report/qaGate.ts` for the phases, the Workspace executes the effects). When the radiologist clicks **Prelim** or **Sign off**, the editor runs two gates in order and owns both; the agent does not know it is being used as a gate — it just receives the literal `/qa` prompt.
 
 ```
 click [Sign off]
   │
   ├─ deterministic gate (editor, instant, no model)
-  │    pending changes? · unreviewed amber text? · ___ blanks left?  → refuse, point at them
+  │    empty report? · pending changes? · unreviewed amber text? · __ blanks left?  → refuse, point at them   audit qa.refused
   │
-  ├─ agent gate: editor sends "/qa", counts _rad/flag requests until the turn ends
+  ├─ agent gate: editor sends "/qa", counts the flags the FlagStore gained until the turn ends (90 s timeout)
   │    0 flags → final                                      audit qa.passed
   │    n flags → cards · [Review] [Sign off anyway]
-  │              └─ final                                   audit qa.overridden {flags: [ids]}
-  └─ agent absent / Level < 2 / timeout → "QA unavailable" · [Sign off anyway]   audit qa.skipped
+  │              └─ final                                   audit qa.overridden {flagIds}
+  └─ agent absent / Level < 2 / timeout / Stop / error → "QA unavailable" · [Sign off anyway]   audit qa.skipped {reason}
+                                                            (after a timeout the override cancels the turn first)
 ```
 
-Rules: the gate is **advisory** — the agent is untrusted and must be unable to prevent a sign-off (outage, hallucinated flag, hosted latency in an ER); the override is what gets audited. What is deterministic (blanks, pending changes, amber) never goes to the model. A **short prelim** gets the deterministic gate only — it exists to beat the clock.
+Rules: the gate is **advisory** — the agent is untrusted and must be unable to prevent a sign-off (outage, hallucinated flag, hosted latency in an ER); the override is what gets audited. What is deterministic (blanks, pending changes, amber) never goes to the model. A **short prelim** gets the deterministic gate only — it exists to beat the clock. Every transition lands as `status.changed`; the same pattern serves **Prelim** (→ `preliminary`) and **Sign off** (→ `final`).
+
+**"Never edits" is enforced by the editor too** (slice 6): during any `/qa` turn — gate-sent or hand-typed, same prompt — an agent write is refused before anyone is asked: no proposal is rendered, `session/request_permission` is answered with the agent's own *reject* option (`permission.refused {outcome: qa}`), `fs/write_text_file` → `-32003`. The identical refusal guards a `final` report (`outcome: final`).
 
 **Prelim runs the agent gate too** (KS, 2026-08-30): the resident's prelim is what the clinician acts on, so both Prelim and Sign off pass through `/qa`; only the short prelim is exempt. The gate stays advisory at both transitions.
 

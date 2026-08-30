@@ -175,7 +175,7 @@ An urgent imaging finding that must reach the clinician promptly — intracrania
 _Avoid_: using it for anything the agent raises (that is a flag)
 
 **QA gate**:
-The check the editor runs when the radiologist issues a Prelim or signs off: first deterministic (no pending changes, no unreviewed text, no `___` blanks), then advisory (`/qa` → flags). Never blocks: the radiologist may proceed over open flags, and the override is audited.
+The check the editor runs when the radiologist issues a Prelim or signs off: first deterministic (not empty, no pending changes, no unreviewed text, no template blanks), then advisory (`/qa` → flags). Never blocks: the radiologist may proceed over open flags or without the agent — the *… anyway* button is the override, and the override is audited (`qa.overridden`, `qa.skipped`).
 _Avoid_: validation, pre-commit hook, blocker
 
 ## Agent & protocol

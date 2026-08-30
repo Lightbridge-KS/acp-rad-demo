@@ -5,7 +5,7 @@ read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridg
 
 # ACP-Rad Demo — System & OOP Architecture
 
-> Source: this repo (as built through slice 5) + slice-4/5 design sessions 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 6–7, marked *planned*) · Type: Application
+> Source: this repo (as built through slice 6) + slice-4/5/6 design sessions 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slice 7, marked *planned*) · Type: Application
 > See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Data Architecture](./05-data-architecture.md) · [ACP wire shape](../protocol/01-acp-shape.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-demo.md`](../progress/overview-demo.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
 
 ## 1. Overview
@@ -221,7 +221,7 @@ sequenceDiagram
     E->>E: clear the mark · audit flag.acknowledged
 ```
 
-The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `Literal` kinds) sends `_rad/flag`; the editor records it in the `FlagStore`, marks the located line, answers `acknowledged` **on receipt** (KS, 2026-08-30 — the turn never waits for a human; nothing is in flight on Stop), and renders a **flag card** in the sidebar — the one decision the sidebar owns. The radiologist's **Acknowledge** is local: it clears the mark and audits `flag.acknowledged`. No edit is ever made. `locations[].line` is the 1-based line of the file *as the agent read it*; the editor re-anchors it by an ordinal walk that counts like `canonicalLines`, then verifies the text (grant base text while a grant is open). Kinds: `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` (design 04 §3.5). The same path serves the QA gate at Prelim / Sign off (slice 6): the editor sends `/qa` and counts the flags; the agent never knows it is a gate.
+The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `Literal` kinds) sends `_rad/flag`; the editor records it in the `FlagStore`, marks the located line, answers `acknowledged` **on receipt** (KS, 2026-08-30 — the turn never waits for a human; nothing is in flight on Stop), and renders a **flag card** in the sidebar — the one decision the sidebar owns. The radiologist's **Acknowledge** is local: it clears the mark and audits `flag.acknowledged`. No edit is ever made. `locations[].line` is the 1-based line of the file *as the agent read it*; the editor re-anchors it by an ordinal walk that counts like `canonicalLines`, then verifies the text (grant base text while a grant is open). Kinds: `discrepancy` · `omission` · `unsupported` · `critical_uncommunicated` (design 04 §3.5). The same path serves the QA gate at Prelim / Sign off (built, slice 6 — 04 §3.5): the editor sends `/qa` and counts the flags the `FlagStore` gained during that turn; the agent never knows it is a gate. During any `/qa` turn, and on a `final` report, the editor refuses agent writes outright (`permission.refused`, `fs.write.refused`).
 
 ## 7. Extension Points
 
@@ -264,5 +264,5 @@ Settled decisions from the 2026-08-29 grilling live in the archived draft's §11
 
 - 💡 **Skills transport** (slice 5+): deepagents loads `skills=` through the backend, and ours is the ACP client backend — route `/skills/**` to a local `FilesystemBackend` via `CompositeBackend`, or advertise skills purely by prompt expansion. Decide at slice-5 planning.
 - Model-visible partial outcome: deepagents' `EditResult` cannot carry `_meta`; after a `partial` the model learns the truth only by re-reading (the prompt says so). v0.2 candidate: a `_rad/` notification.
-- `session/load` resume and `session/set_config_option` model switching: out of v0.1.
+- `session/load` resume: out of v0.1. (`session/set_config_option` model switching landed in slice 6 — plain ACP, deepagents-acp's `models=` list, the editor's sidebar select.)
 - Word-level hunks: kept as the alternative in ADR 0002.

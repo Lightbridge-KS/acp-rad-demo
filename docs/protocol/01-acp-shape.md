@@ -48,7 +48,8 @@ Every method the v1 SDKs know, and what this demo does with it. "Request" expect
 | `session/prompt` | request | one user turn; returns when the turn ends | **used** — `prompt: [{type: "text", text}]`; a `/skill [arg]` text is expanded agent-side; result `{stopReason}` |
 | `session/cancel` | notification | abort the running turn | **used** — *Stop*; the client first answers every in-flight permission `cancelled` |
 | `session/set_mode` | request | switch the agent's permission mode | used only as **Level 0 hygiene** — pin `default` when a registry agent starts in another mode |
-| `session/set_model` · `session/set_config_option` | request | runtime model / config switching | not used — provider is chosen by `RAD_MODEL` at process start |
+| `session/set_config_option` | request | runtime config switching | **used (slice 6)** — the agent advertises a `model` select in `session/new.configOptions` (`RAD_MODELS`); the editor's sidebar select sends `{sessionId, configId: "model", value}` and the agent rebuilds its graph. No profile extension involved — the provider switch is plain ACP. |
+| `session/set_model` | request | runtime model switching | not used — `set_config_option` covers it |
 
 ### 3.2 Agent → Client
 

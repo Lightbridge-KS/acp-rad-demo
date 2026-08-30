@@ -20,7 +20,7 @@ just dev              # bridge (ws://localhost:8787/acp) + editor (http://localh
 The bridge spawns the agent **per WebSocket connection** from `apps/bridge/agents.json`:
 `?agent=rad` (default, our Python agent), `?agent=claude`, `?agent=gemini` (Level 0 spike targets).
 
-The editor picks its case from the page URL until the worklist lands (slice 6): `http://localhost:5173/?case=<id>` with `ct-brain-er-stroke` (default; impression blanked), `ct-brain-er-blank` (scenario 0), `cxr-pa-prior` and `ct-chest-er-nodule-prior` (priors for `/compare`), `ct-wa-er-stone` (a planted laterality discrepancy for `/qa`, scenario 3). Fixtures live in `apps/editor/fixtures/<id>/` — `meta.json`, `report.md`, `priors/<accession>.md` + `priors/index.md`; all synthetic.
+The header's worklist select opens any case; `http://localhost:5173/?case=<id>` deep-links one and stays in sync: `ct-brain-er-stroke` (default; impression blanked), `ct-brain-er-blank` (scenario 0), `cxr-pa-prior` and `ct-chest-er-nodule-prior` (priors for `/compare`), `ct-wa-er-stone` (a planted laterality discrepancy for `/qa`, scenario 3). Fixtures live in `apps/editor/fixtures/<id>/` — `meta.json`, `report.md`, `priors/<accession>.md` + `priors/index.md`; all synthetic.
 
 ```
 browser editor ──ws frames──► bridge ──ndjson lines──► agent (stdio)
