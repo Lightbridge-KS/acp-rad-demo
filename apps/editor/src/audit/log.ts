@@ -12,7 +12,7 @@ export type AuditContext = {
 };
 
 export type AuditSink = (method: string, record: AuditRecord) => void;
-export type AuditFields = Partial<Pick<AuditRecord, "path" | "toolCallId" | "hunkId" | "argsHash" | "outcome">>;
+export type AuditFields = Partial<Pick<AuditRecord, "path" | "toolCallId" | "hunkId" | "flagId" | "argsHash" | "outcome">>;
 
 export class AuditLog {
   readonly records: AuditRecord[] = [];

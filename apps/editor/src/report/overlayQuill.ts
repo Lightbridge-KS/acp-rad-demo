@@ -5,7 +5,7 @@
  */
 import Quill, { Delta } from "quill";
 import type { Op } from "quill";
-import { AI_DELETE, AI_UNREVIEWED, AI_INSERT, lineIndex, lineLength, splitLines, touchedLines } from "./overlay.ts";
+import { AI_DELETE, AI_FLAG, AI_UNREVIEWED, AI_INSERT, lineIndex, lineLength, splitLines, touchedLines } from "./overlay.ts";
 
 export function currentOps(quill: Quill): Op[] {
   return quill.getContents().ops;
@@ -17,7 +17,7 @@ export function applyOps(quill: Quill, next: Op[]): void {
   if (change.ops.length > 0) quill.updateContents(change, "api");
 }
 
-const NO_MARKS = { [AI_INSERT]: false, [AI_DELETE]: false, [AI_UNREVIEWED]: false } as const;
+const NO_MARKS = { [AI_INSERT]: false, [AI_DELETE]: false, [AI_UNREVIEWED]: false, [AI_FLAG]: false } as const;
 
 /**
  * After a user edit: typed text must not inherit overlay/unreviewed marks from its neighbours, and

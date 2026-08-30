@@ -2,8 +2,10 @@
  * Proposal overlays over plain Quill ops — pure functions, no DOM (ADR 0002, design §5.7).
  *
  * The overlay lives in the Delta as inline attributes (`ai-insert` / `ai-delete` keyed by hunk
- * id, `ai-unreviewed` keyed by proposal id). `stripOverlays` is what the ReportStore reads through,
- * so a pending proposal is rendered but never in the canonical buffer (INV-1).
+ * id, `ai-unreviewed` keyed by proposal id, `ai-flag` keyed by flag id). `stripOverlays` is what
+ * the ReportStore reads through, so a pending proposal is rendered but never in the canonical
+ * buffer (INV-1). A flag mark is a plain attribute on a buffer line: it moves with the line and
+ * disappears with it; it is never in the canonical Markdown (`deltaToMarkdown` ignores it).
  */
 import type { AttributeMap, Op } from "quill";
 import {
@@ -18,6 +20,7 @@ import {
 export const AI_INSERT = "ai-insert";
 export const AI_DELETE = "ai-delete";
 export const AI_UNREVIEWED = "ai-unreviewed";
+export const AI_FLAG = "ai-flag";
 
 export type Line = { runs: Op[]; attrs: AttributeMap };
 
@@ -68,11 +71,11 @@ export function lineLength(line: Line): number {
 // Buffer view (INV-1)
 // ---------------------------------------------------------------------------
 
-/** What the agent and the audit see: inserted overlay lines dropped, deletions kept as text. */
+/** What the agent and the audit see: inserted overlay lines dropped, deletions kept as text, no marks. */
 export function stripOverlays(ops: Op[]): Op[] {
   const kept = splitLines(ops)
     .filter((l) => !isInsertLine(l))
-    .map((l) => ({ attrs: l.attrs, runs: l.runs.filter((r) => r.attributes?.[AI_INSERT] === undefined).map(withoutOverlayAttrs) }));
+    .map((l) => ({ attrs: l.attrs, runs: l.runs.filter((r) => r.attributes?.[AI_INSERT] === undefined).map((r) => dropAttr(withoutOverlayAttrs(r), AI_FLAG)) }));
   return joinLines(kept);
 }
 
@@ -253,6 +256,75 @@ export function touchedLines(ops: Op[], change: Op[]): Set<number> {
     }
   }
   return touched;
+}
+
+// ---------------------------------------------------------------------------
+// Flags (design 04 §3.5): a located line carries `ai-flag` = flag id until acknowledged
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a flag points, in the Client's terms: the section file (or the whole report when
+ * `section` is null), the 1-based line of that file *as the agent read it*, and that line's text.
+ */
+export type FlagTarget = { section: SectionId | null; ordinal: number; text: string };
+
+/**
+ * Buffer line index for a flag target, or -1. Walks the section's buffer lines the way
+ * `canonicalLines` would count them (insert lines skipped, blank runs collapsed, leading blanks
+ * dropped) to the ordinal, then verifies the text; if the buffer moved since the agent read it,
+ * falls back to the first line with that exact text — never for a blank or a label line, which
+ * would be ambiguous.
+ */
+export function locateFlagLine(lines: Line[], target: FlagTarget): number {
+  const range = sectionRange(lines, target.section);
+  if (range.start < 0) return -1;
+  const matchable = (i: number) => !isInsertLine(lines[i]!);
+  let emitted = 0;
+  let prevBlank = true; // nothing emitted yet ⇒ leading blanks are dropped
+  for (let i = range.start; i < range.end; i++) {
+    if (!matchable(i)) continue;
+    const text = lineText(lines[i]!);
+    if (text === "" && prevBlank) continue;
+    prevBlank = text === "";
+    emitted += 1;
+    if (emitted === target.ordinal) {
+      if (text === target.text) return i;
+      break;
+    }
+  }
+  if (target.text === "" || sectionIdOfLine(target.text) !== undefined) return -1;
+  for (let i = range.start; i < range.end; i++) if (matchable(i) && lineText(lines[i]!) === target.text) return i;
+  return -1;
+}
+
+export type FlagResult = { ops: Op[]; found: boolean };
+
+/** Mark the target line with the flag id; `found: false` leaves the ops untouched (card only). */
+export function flagLineOps(ops: Op[], target: FlagTarget, flagId: string): FlagResult {
+  const lines = splitLines(ops);
+  const i = locateFlagLine(lines, target);
+  if (i < 0) return { ops, found: false };
+  markRuns(lines[i]!, AI_FLAG, flagId);
+  return { ops: joinLines(lines), found: true };
+}
+
+/** Remove one flag's mark wherever it is (acknowledged). */
+export function clearFlagOps(ops: Op[], flagId: string): Op[] {
+  return joinLines(splitLines(ops).map((l) => ({ attrs: l.attrs, runs: l.runs.map((r) => (r.attributes?.[AI_FLAG] === flagId ? dropAttr(r, AI_FLAG) : r)) })));
+}
+
+/** Character index of the first line carrying the flag's mark (any run — typing may unmark the first), or -1. */
+export function flagLineIndex(ops: Op[], flagId: string): number {
+  const lines = splitLines(ops);
+  const i = lines.findIndex((l) => l.runs.some((r) => r.attributes?.[AI_FLAG] === flagId));
+  return i < 0 ? -1 : lineIndex(lines, i);
+}
+
+/** Flag ids currently marked in the buffer (a deleted line takes its mark with it). */
+export function flaggedIds(ops: Op[]): string[] {
+  const ids = new Set<string>();
+  for (const l of splitLines(ops)) for (const r of l.runs) if (typeof r.attributes?.[AI_FLAG] === "string") ids.add(r.attributes[AI_FLAG] as string);
+  return [...ids];
 }
 
 // ---------------------------------------------------------------------------

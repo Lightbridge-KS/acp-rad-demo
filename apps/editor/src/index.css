@@ -33,3 +33,9 @@ body,
   background: #fef3c7;
   border-bottom: 2px dotted #b45309;
 }
+/* A flag's located line (design 04 §3.5): in the buffer, cleared when acknowledged. */
+.ql-ai-flag {
+  background: #ffe4e6;
+  text-decoration: underline wavy #e11d48;
+  text-decoration-skip-ink: none;
+}

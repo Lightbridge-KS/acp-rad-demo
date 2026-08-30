@@ -163,6 +163,7 @@ export const zAuditRecord = z.object({
   path: z.string().optional(),
   toolCallId: z.string().optional(),
   hunkId: z.string().optional(),
+  flagId: z.string().optional(),
   argsHash: z.string().optional(),
   outcome: z.string().optional(),
 });
@@ -170,6 +171,44 @@ export type AuditRecord = z.infer<typeof zAuditRecord>;
 
 /** `_`-prefixed notification the Client sends up the same connection; the bridge persists it. */
 export const AUDIT_METHOD = "_rad/audit";
+
+// ---------------------------------------------------------------------------
+// Flags (proposal §8.2, design 04 §3.5) — the agent's second channel: a flag may not change bytes
+// ---------------------------------------------------------------------------
+
+/** The only four kinds; style has no kind (the schema, not the prompt, keeps nits out). */
+export const FLAG_KINDS = ["discrepancy", "omission", "unsupported", "critical_uncommunicated"] as const;
+export const zFlagKind = z.enum(FLAG_KINDS);
+export type FlagKind = z.infer<typeof zFlagKind>;
+
+/**
+ * Where a flag points. `line` is the **1-based line of the file at `path` as the agent read it**
+ * (`fs/read_text_file` of that path, whole file) — the Client re-anchors it to its own buffer.
+ */
+export const zFlagLocation = z.object({
+  path: z.string().min(1),
+  line: z.number().int().positive().optional(),
+});
+export type FlagLocation = z.infer<typeof zFlagLocation>;
+
+/** `_rad/flag` request params (Agent → Client). */
+export const zFlagParams = z.object({
+  sessionId: z.string(),
+  kind: zFlagKind,
+  summary: z.string().min(1).max(500),
+  locations: z.array(zFlagLocation).default([]),
+});
+export type FlagParams = z.infer<typeof zFlagParams>;
+
+/**
+ * `_rad/flag` response. `acknowledged` means the Client holds the flag and has marked its lines
+ * (KS, 2026-08-30); the radiologist's own acknowledgement is a local act, audited `flag.acknowledged`.
+ */
+export const zFlagResponse = z.object({ outcome: z.literal("acknowledged") });
+export type FlagResponse = z.infer<typeof zFlagResponse>;
+
+/** `_`-prefixed request the Agent sends to the Client; requires `flags: true` both ways. */
+export const FLAG_METHOD = "_rad/flag";
 
 // ---------------------------------------------------------------------------
 // Errors (proposal §10)

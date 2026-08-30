@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  FLAG_METHOD,
   levelOf,
   readRadAgentCaps,
   worklistRoot,
+  zAuditRecord,
+  zFlagParams,
+  zFlagResponse,
   zRadClientCaps,
   zRadSessionMeta,
   zRadPromptMeta,
@@ -67,5 +71,35 @@ describe("schemas", () => {
 
   it("readRadAgentCaps returns undefined for a malformed block", () => {
     expect(readRadAgentCaps({ rad: "nope" })).toBeUndefined();
+  });
+});
+
+describe("flags", () => {
+  const base = { sessionId: "s1", kind: "discrepancy", summary: "FINDINGS say right; IMPRESSION says left." };
+
+  it("parses a flag and defaults locations to []", () => {
+    expect(zFlagParams.parse(base)).toEqual({ ...base, locations: [] });
+    expect(zFlagParams.parse({ ...base, locations: [{ path: "/worklist/A/sections/impression.md", line: 2 }] }).locations).toEqual([
+      { path: "/worklist/A/sections/impression.md", line: 2 },
+    ]);
+    expect(FLAG_METHOD).toBe("_rad/flag");
+  });
+
+  it("rejects a fifth kind, an empty or overlong summary, and a non-positive line", () => {
+    expect(() => zFlagParams.parse({ ...base, kind: "style" })).toThrow();
+    expect(() => zFlagParams.parse({ ...base, summary: "" })).toThrow();
+    expect(() => zFlagParams.parse({ ...base, summary: "x".repeat(501) })).toThrow();
+    expect(() => zFlagParams.parse({ ...base, locations: [{ path: "/worklist/A/report.md", line: 0 }] })).toThrow();
+  });
+
+  it("response is acknowledged only; audit records may carry a flagId", () => {
+    expect(zFlagResponse.parse({ outcome: "acknowledged" })).toEqual({ outcome: "acknowledged" });
+    expect(() => zFlagResponse.parse({ outcome: "dismissed" })).toThrow();
+    const rec = zAuditRecord.parse({
+      ts: "2026-08-30T00:00:00Z", sessionId: "s", accession: "A",
+      actor: { userId: "u", role: "radiologist" }, agent: { name: "a", level: 2 },
+      event: "flag.raised", flagId: "f1", outcome: "discrepancy",
+    });
+    expect(rec.flagId).toBe("f1");
   });
 });
