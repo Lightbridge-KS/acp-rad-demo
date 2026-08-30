@@ -92,7 +92,7 @@ sequenceDiagram
 | Tools | `agent.py` `FS_TOOLS = ls, read_file, glob, grep, edit_file, write_file` via `FilesystemMiddleware(backend=AcpClientBackend)` | core code (deepagents) over an adapter (ours) | ✅ |
 | Tool backend | `backend.py` `AcpClientBackend`: `aread`→`fs/read_text_file`; `als`/`aglob`/`agrep` answered from the session **manifest** (ACP v1 has no `ls`); `aedit`/`awrite` do read-modify-write → `fs/write_text_file` | ours | ✅ |
 | Read-only zones | `FilesystemPermission(operations=["write"], paths=["/priors/**", "/templates/**", "/snippets/**"], mode="deny")` — defense in depth; the editor refuses them too (`-32003`) | authored config | ✅ |
-| Skills (`/impression`, `/compare`, `/proofread`) | `RadReportAgentServer` sends `available_commands_update` after `session/new` and expands the command text at prompt time — one `prompts/skills/<name>.md` per skill, spec in [04-skills](./04-skills.md) | ours | *planned* slice 4 |
+| Skills (`/impression`, `/compare`, `/proofread`) | `RadReportAgentServer` sends `available_commands_update` after `session/new` and expands the command text at prompt time — one `prompts/skills/<name>.md` per skill, spec in [04-skills](./04-skills.md) | ours | ✅ slice 4 |
 | Skills (deepagents `skills=`, `skills-radreport`) | would load `SKILL.md` folders **through the backend** — needs a `CompositeBackend` route to a local `FilesystemBackend` | authored content | ❌ decided out until slice 5+ |
 | `raise_flag` tool → `_rad/flag` | `server.py` `ext_method` seam | ours | *planned* slice 5 |
 | MCP | `session/new.mcpServers: []` | — | ❌ absent, decided: v1 profile rides on `fs/*`; MCP-over-ACP is the v2 path for the `ReportStore` seam |
@@ -126,7 +126,7 @@ flowchart LR
 | Add… | Where |
 |---|---|
 | a tool | `agent.py`: pass `tools=[…]` to `create_deep_agent`; mark it in `interrupt_on` if it writes |
-| a skill (advertised command) | `RadReportAgentServer`: extend the `available_commands_update` list + the prompt expansion table (*planned*) |
+| a skill (advertised command) | add `prompts/skills/<name>.md` — `RadReportAgentServer` advertises and expands every file in that folder |
 | a `_rad/*` method | `server.py` `ext_method`/`ext_notification`; schema in `packages/acp-rad/src/schema.ts`; editor `onRequest("_rad/…")` |
 | a provider | `RAD_MODEL=<provider>:<model>`; OpenAI-compatible endpoints via `RAD_MODEL_BASE_URL` |
 | another agent core | `apps/bridge/agents.json`; Level 0 needs the on-disk mirror + file-watch (slice 7) |
@@ -143,7 +143,7 @@ flowchart LR
 | Memory (working) | ✅ | `MemorySaver` | in-process only |
 | Memory (persistent) | ❌ decided | — | the report + audit are the record |
 | Tools | ✅ | `FilesystemMiddleware` + `AcpClientBackend` | all served by the editor's `fs/*` |
-| Skills | ⚠️ planned | `available_commands_update` (slice 4); `skills=` later | 💡 transport for `skills=` undecided (see §9) |
+| Skills | ✅ | `prompts/skills/*.md` → `available_commands_update` + prompt expansion (slice 4); `skills=` later | 💡 transport for `skills=` undecided (see §9) |
 | MCP | ❌ decided | `mcpServers: []` | v2 path |
 | Subagents | ❌ decided | — | single agent |
 | Hooks / scheduling | ❌ | — | reactive only |

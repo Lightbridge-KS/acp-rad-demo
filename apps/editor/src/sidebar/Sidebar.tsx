@@ -20,7 +20,7 @@ import {
 } from "@assistant-ui/react";
 import type { AuditRecord, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
-import { GROUP_LABEL, type Command, type CommandGroups } from "../commands/registry.ts";
+import { GROUP_LABEL, matchScore, type Command, type CommandGroups } from "../commands/registry.ts";
 import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
 
@@ -145,12 +145,30 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
     })),
   });
   const groupOf = (itemId: string): keyof CommandGroups | undefined => itemId.split(":")[0] as keyof CommandGroups | undefined;
+  // assistant-ui's search matches descriptions too; rank by id first so `/impression` never
+  // resolves to a snippet that mentions the impression head, and show each command once.
+  const adapter = useMemo(
+    () => ({
+      ...slash.adapter,
+      search: (query: string) => {
+        const base = slash.adapter.search?.(query) ?? [];
+        if (!query.trim()) return base;
+        const seen = new Set<string>();
+        return base
+          .map((item, order) => ({ item, order, score: matchScore(entries.find((e) => e.id === item.id)!.command, query) }))
+          .filter(({ item, score }) => score >= 0 && !seen.has(item.label) && seen.add(item.label))
+          .sort((a, b) => a.score - b.score || a.order - b.order)
+          .map(({ item }) => item);
+      },
+    }),
+    [slash.adapter, entries],
+  );
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <ComposerPrimitive.Root className="relative border-t border-gray-200 p-2">
         <ComposerPrimitive.Unstable_TriggerPopover
           char="/"
-          adapter={slash.adapter}
+          adapter={adapter}
           data-testid="composer-slash"
           className="absolute right-2 bottom-full left-2 z-30 mb-1 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
         >

@@ -5,10 +5,10 @@ read_when: Adding or changing a skill; writing or reviewing a skill's expansion 
 
 # ACP-Rad PoC — Skills
 
-> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Design (*planned*, slice 4) · Scope: what the agent does when the radiologist invokes a skill
+> Source: slice-4 design sessions 2026-08-30 (KS rulings on `/compare` scope, `/proofread` laterality, the *flag* vocabulary, flag kinds and the QA gate) · Date: 2026-08-30 · Mode: Built (slice 4; `/qa` and the QA gate *planned*) · Scope: what the agent does when the radiologist invokes a skill
 > See also: [Surface Architecture](./02-surface-architecture.md) §2.2 (the command registry the skills appear in) · [Agentic Architecture](./03-agentic-architecture.md) §5, §9 (the agent's organs; why deepagents `skills=` is out) · Glossary [`CONTEXT.md`](../../CONTEXT.md)
 
-A **skill** is a command the agent advertises and performs; its result is a proposal. In this PoC a skill is nothing more than **a named prompt expansion**: the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
+A **skill** is a command the agent advertises and performs; its result is a proposal. In this PoC a skill is nothing more than **a named prompt expansion** (built in slice 4; `/qa` is the exception, §3.5): the radiologist sends `/name [arg]`, the agent replaces it with authored instruction text, and the ordinary loop — read the namespace, `edit_file` a section, HITL — does the rest. No new tools, no `_rad/*` methods, no schema change. Everything a skill produces still passes the human gate as tracked changes.
 
 ## 1. Mechanism
 
@@ -95,7 +95,7 @@ Expansion (`prompts/skills/compare.md`; `{arg}` = the optional accession):
 >
 > Do not edit the IMPRESSION. If an interval change would alter it, say so in one sentence. Never state a date that is not in the index.
 
-**Example trace** — case `ct-chest-er-nodule-prior` (planned fixture): ER CT chest today (`meta.json` date 30/08/2026) with a 9-mm RUL nodule; priors: CT chest 12/06/2025 with the same nodule at 6 mm, and CT whole abdomen 20/02/2026 (lung bases clear; RUL not covered).
+**Example trace** — case `ct-chest-er-nodule-prior`: ER CT chest today (`meta.json` date 30/08/2026) with a 9-mm RUL nodule; priors: CT chest 12/06/2025 with the same nodule at 6 mm, and CT whole abdomen 20/02/2026 (lung bases clear; RUL not covered).
 
 ```
 you:    /compare
@@ -244,7 +244,7 @@ Rules: the gate is **advisory** — the agent is untrusted and must be unable to
 ## 5. Verification
 
 - **Dry:** a Python unit test per skill file — frontmatter parses, `{arg}` substitution, unknown `/name` passes through, the advertisement lists exactly the files present.
-- **Live (`just smoke`):** adds `/compare` on `ct-chest-er-nodule-prior`: the first edit on `sections/comparison.md` contains both prior accessions' dates from the index; and `/proofread` on a seeded buffer with `no intraventricular hemorrhage`: an edit on `sections/findings.md` whose `new_string` capitalises it.
+- **Live (`just smoke`, built):** stage 2 opens a second session on `ct-chest-er-nodule-prior`, asserts the advertisement lists `compare · impression · proofread`, and that `/compare` leaves both prior dates on the COMPARISON line. `/proofread` is not yet smoke-tested (unit-tested expansion only).
 - **Browser (scenario 2, `gpt-5.6-terra`):** `/` → Skills → `/compare` → two changes → Accept; then the hand-dated COMPARISON variant → corrected date.
 
 ## 6. Extension points

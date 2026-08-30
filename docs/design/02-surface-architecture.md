@@ -5,7 +5,7 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 
 # ACP-Rad PoC — Surface Architecture (UX · AX)
 
-> Source: this repo (as built through slice 3) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (*planned* = slice 4+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
+> Source: this repo (as built through slice 4) + wireframes `_playground/2026-08-29_wireframe-b/` ([canvas](https://claude.ai/code/artifact/fbdd654e-1370-4ef0-b655-cad64d9e41b7)) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built through slice 4) + Design (*planned* = slice 5+) · Surface: Hybrid — GUI app (radiologist) + file-shaped agent surface (AX)
 > See also: [System & OOP Architecture](./01-system-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · [Skills](./04-skills.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Runbook [`dev/running.md`](../dev/running.md)
 
 ## Cheat Sheet
@@ -13,18 +13,18 @@ read_when: Building or changing anything the radiologist clicks or types (toolba
 | I want to… | Do |
 |---|---|
 | Start | `just dev` → http://localhost:5173 (bridge on `ws://localhost:8787/acp?agent=rad`) |
-| Scaffold a blank ER study | `/template` (id defaults from the study's `meta.json`) — *planned* |
-| Issue a short prelim | `/short-prelim` (region defaults from the study) — *planned* |
+| Scaffold a blank ER study | `/template` (id defaults from the study's `meta.json`) |
+| Issue a short prelim | `/short-prelim` (region defaults from the study) |
 | Draft the impression | `/impression` (or type it in the composer) |
 | Decide a change | **Accept** · **Accept for review** · **Reject**; bulk: *Accept all for review* · *Reject all* |
 | Clear amber (unreviewed) text | edit the line, or **Mark all reviewed** |
-| Compare with the prior | `/compare` — *planned* |
-| Mark attending review | `/er-reviewed` · `/er-not-reviewed` — *planned* |
+| Compare with the prior | `/compare` |
+| Mark attending review | `/er-reviewed` · `/er-not-reviewed` |
 | Check before issuing | `/qa` → flag cards; **Prelim** / **Sign off** run it as the QA gate — *planned* (slices 5–6) |
 | Stop the agent | **Stop** in the sidebar |
 | See what happened | sidebar **Audit** tab (same records as `audit/{accession}.jsonl`) |
 
-Vocabulary note: the built slice-3 UI says *Insert / Insert as draft / Discard*, "hunks" and "AI draft lines"; the canonical UI words are *Accept / Accept for review / Reject* on a *change*, and *unreviewed* text (2026-08-30, see `CONTEXT.md`). The rename lands with slice 4.
+Vocabulary: the UI says *Accept / Accept for review / Reject* on a *change* (Accept / Reject only on an editor command's change), and *unreviewed* text (2026-08-30, see `CONTEXT.md`); a local change's bulk verb reads *Accept all*.
 
 ## 1. Overview
 
@@ -56,12 +56,12 @@ One screen, two users. The **radiologist** writes and decides a report in a Quil
 | Change pill | Decides one change (a hunk): Accept (lands plain) · Accept for review (lands amber) · Reject. |
 | Header counters | Bulk decide pending changes; clear all unreviewed text. |
 | Status pill | Shows `draft · short prelim` / `preliminary` / `final`; *planned* (slice 6): Prelim / Sign off actions behind the QA gate (04 §3.5); `final` locks writes. |
-| `Commands ▾` (toolbar) | The full command list, grouped. *planned* |
-| `/` in the report | Notion-style menu at the caret; filters as you type. *planned* |
+| `Commands ▾` (toolbar) | The full command list, grouped. |
+| `/` in the report | Notion-style menu at the caret (`/` at a line start or after whitespace); a typed query becomes one ranked *Matches* list; `/name arg` passes an argument. |
 | Sidebar · Chat | Transcript, thought chunks, tool cards mirroring decisions; composer with `/` menu; Send / Stop. |
 | Sidebar · Audit | Live audit trail. |
 | Flag card | `_rad/flag` acknowledgement — the one decision the sidebar owns. *planned* (slice 5) |
-| Worklist | 3 synthetic cases. *planned* (slice 6); until then a `?case=<id>` URL parameter (*planned*, slice 4). |
+| Worklist | 4 synthetic cases. *planned* (slice 6); until then the `?case=<id>` URL parameter (`ct-brain-er-stroke` default, `ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`). |
 
 ### 2.2 Commands
 
@@ -114,11 +114,11 @@ Open http://localhost:5173: the default case (`ct-brain-er-stroke`, impression b
 
 ## 4. Key User Journeys
 
-### 4.1 Scenario 0 — blank ER study → `/template` *(planned)*
+### 4.1 Scenario 0 — blank ER study → `/template` (built, slice 4)
 
 Open the blank CT brain study → `/` → *Suggested: /template ct-brain-er* → Enter → the filled skeleton appears instantly (dose from `meta.json`, blanks kept) → type HISTORY. Status stays `draft`. "Why would I use this" moment: seconds, no model.
 
-### 4.2 Scenario 3b — short prelim → full report *(planned)*
+### 4.2 Scenario 3b — short prelim → full report (built, slice 4)
 
 ```mermaid
 sequenceDiagram
@@ -129,7 +129,7 @@ sequenceDiagram
     R->>E: types critical findings under it
     Note over R: clinician reads the SP
     R->>E: /template
-    E-->>R: tracked changes: SP struck at top, skeleton inserted, SP re-inserted after IMPRESSION items
+    E-->>R: tracked changes: skeleton inserted above, SP paragraph re-placed after the IMPRESSION items (closing sentence dropped), typed lines stay in place
     R->>E: Accept all — or Reject the changes to keep
     E-->>R: full report · shortPrelim cleared · audit short_prelim.folded
 ```
@@ -153,9 +153,9 @@ sequenceDiagram
     E-->>R: that line's amber clears · counter decrements
 ```
 
-### 4.4 Scenario 2 — `/compare` *(planned)*; 4 — Reject; 5 — Cancel
+### 4.4 Scenario 2 — `/compare` (built, slice 4); 4 — Reject; 5 — Cancel
 
-`/compare` on a case with a prior: tool card "read /priors/ACC…/report.md" → COMPARISON change → Accept. Reject: the change vanishes, the card says "rejected", the agent's turn ends gracefully. Cancel: **Stop** → every rendered change is dropped, pending permission answered `cancelled`, the turn shows a *stopped* marker (*planned*).
+`/compare` on a case with priors: tool cards "read /priors/index.md", "read /priors/ACC…/report.md" → two changes (COMPARISON, FINDINGS interval wording) → Accept. The agent proposes both edits in one batch, so both changes are pending at once. Reject: the change vanishes, the card says "rejected", the agent's turn ends gracefully. Cancel: **Stop** → every rendered agent change is dropped (local changes stay), pending permission answered `cancelled`, the turn shows a *stopped* marker.
 
 ## 5. Interaction & State
 
@@ -206,7 +206,7 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 |---|---|---|
 | Agent | bridge URL `?agent=` (`VITE_BRIDGE_URL` today; URL param *planned*) | `rad` (default) · `claude` · `gemini` — from `apps/bridge/agents.json` |
 | Model | `RAD_MODEL`, `RAD_MODEL_BASE_URL`, provider keys | see [`dev/running.md`](../dev/running.md) |
-| Case | default = first fixture; `?case=<id>` *(planned)*; worklist *(slice 6)* | `apps/editor/fixtures/<case>/` |
+| Case | `meta.json.demo.default` case; `?case=<id>`; worklist *(slice 6)* | `apps/editor/fixtures/<case>/` |
 | Demo start state | `meta.json.demo.start` | `complete` · `impression_empty` |
 | Templates / snippets | `apps/editor/fixtures/{templates,snippets}/*.md` | canonical Markdown |
 | Tracing / audit | `BRIDGE_TRACE=1`, `AUDIT_DIR` | — |
@@ -214,4 +214,3 @@ Sidebar header dot: `disconnected` · `connecting` · `ready` · `error` (reason
 ## 8. Decisions Needed
 
 - 💡 **`/sign-off`**: an editor command in the same registry (fits "one list, three surfaces") or only an action on the status pill (fits "status transitions are explicit, not commands")? Decide at slice-6 planning; the registry design must not preclude either.
-- 💡 **Case switching before slice 6**: `?case=<id>` is the cheapest way to reach the prior-bearing cases for `/compare`; confirm it is acceptable demo UX until the worklist lands, or pull the switcher forward.

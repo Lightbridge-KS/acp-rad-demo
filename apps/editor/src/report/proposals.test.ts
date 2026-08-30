@@ -110,6 +110,18 @@ describe("ProposalStore", () => {
     expect(store.takeGrant(SECTION)).toBeUndefined(); // dropped on expiry
   });
 
+  it("a proposal decided before its permission request is answered when the request arrives", async () => {
+    const store = new ProposalStore(ACC);
+    const p = store.fromDiff("early", { path: SECTION, oldText: "- ...", newText: "- A." }, CURRENT)!;
+    store.decideAll("early", "accept_edit"); // radiologist is faster than the agent's interrupt
+    expect(p.state).toBe("decided");
+    expect(store.takeGrant(SECTION)).toBeUndefined(); // no grant until the agent asks
+    expect(store.matchPending(SECTION, "- ...", "- A.")?.toolCallId).toBe("early"); // the late request still finds it
+    await expect(store.awaitPermission("early", CLINICAL)).resolves.toEqual({ outcome: "selected", optionId: "accept_edit" });
+    expect(store.takeGrant(SECTION)?.expected).toBe("**IMPRESSION:**\n- A.\n");
+    expect(store.matchPending(SECTION)).toBeUndefined(); // answered proposals are no longer candidates
+  });
+
   it("matchPending correlates a permission request by path and snippets", () => {
     const store = new ProposalStore(ACC);
     const a = store.fromDiff("a", { path: SECTION, oldText: "- ...", newText: "- A." }, CURRENT)!;

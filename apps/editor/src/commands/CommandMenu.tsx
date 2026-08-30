@@ -27,6 +27,8 @@ export function menuKey(key: string, index: number, count: number): MenuAction {
 
 type Props = {
   groups: CommandGroups;
+  /** The typed query, if any: the single ranked group is then labelled *Matches*. */
+  query?: string;
   highlighted: number;
   onHighlight: (index: number) => void;
   onSelect: (command: Command) => void;
@@ -34,7 +36,7 @@ type Props = {
   empty?: string;
 };
 
-export function CommandMenu({ groups, highlighted, onHighlight, onSelect, empty = "no matching command" }: Props) {
+export function CommandMenu({ groups, query, highlighted, onHighlight, onSelect, empty = "no matching command" }: Props) {
   const flat = flattenCommands(groups);
   if (flat.length === 0) return <div className="px-3 py-2 text-xs text-gray-400">{empty}</div>;
   let offset = 0;
@@ -48,7 +50,7 @@ export function CommandMenu({ groups, highlighted, onHighlight, onSelect, empty 
         offset += items.length;
         return (
           <div key={g} data-group={g}>
-            <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{GROUP_LABEL[g]}</div>
+            <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">{query?.trim() && g === "suggested" ? "Matches" : GROUP_LABEL[g]}</div>
             {items.map((c, i) => {
               const index = start + i;
               const active = index === highlighted;

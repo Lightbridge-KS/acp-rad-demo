@@ -41,12 +41,15 @@ describe("listCommands", () => {
     expect(listCommands(ctx({ level: undefined, skills: [] })).skills).toEqual([]);
   });
 
-  it("filters by id and description; flattens Suggested · Editor · Skills", () => {
+  it("a query collapses the groups into one ranked, deduplicated match list", () => {
     const g = listCommands(ctx({ blank: true }));
-    expect(flattenCommands(filterCommands(g, "short-")).map((c) => c.id)).toEqual(["short-prelim", "short-prelim"]);
-    expect(flattenCommands(filterCommands(g, "prelim")).map((c) => c.id)).toEqual(["short-prelim", "short-prelim", "er-reviewed"]); // description hit
+    expect(flattenCommands(filterCommands(g, "short-")).map((c) => c.id)).toEqual(["short-prelim"]);
+    expect(flattenCommands(filterCommands(g, "prelim")).map((c) => c.id)).toEqual(["short-prelim", "er-reviewed"]); // id substring before description hit
     expect(flattenCommands(filterCommands(g, "attending")).map((c) => c.id)).toEqual(["er-reviewed", "er-not-reviewed"]);
     expect(flattenCommands(filterCommands(g, "zzz"))).toEqual([]);
+    // the skill outranks the snippet whose description mentions the impression head
+    expect(flattenCommands(filterCommands(g, "impression")).map((c) => c.id)).toEqual(["impression", "er-reviewed", "er-not-reviewed"]);
+    expect(filterCommands(g, "impression").editor).toEqual([]);
   });
 });
 

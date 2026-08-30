@@ -5,7 +5,7 @@ read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridg
 
 # ACP-Rad PoC — System & OOP Architecture
 
-> Source: this repo (as built through slice 3, `cf0d6d3`) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 4–7, marked *planned*) · Type: Application
+> Source: this repo (as built through slice 4) + slice-4 design session 2026-08-30 · Date: 2026-08-30 · Mode: Explain (built) + Design (slices 5–7, marked *planned*) · Type: Application
 > See also: [Surface (UX/AX)](./02-surface-architecture.md) · [Agentic Architecture](./03-agentic-architecture.md) · Glossary [`CONTEXT.md`](../../CONTEXT.md) · Tracker [`progress/overview-poc.md`](../progress/overview-poc.md) · Profile proposal [`ideas/acp-rad-protocol-proposal.md`](../ideas/acp-rad-protocol-proposal.md) · Superseded draft [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md) (source survey §0, grilling ledger §11)
 
 ## 1. Overview
@@ -59,7 +59,7 @@ flowchart TD
         sidebar["sidebar/ — transcript mirror on assistant-ui"]
         auditl["audit/log.ts — AuditLog (stamps)"]
         fix["fixtures/ — cases, templates, snippets"]
-        cmds["commands/ — registry, editor commands, menus (planned, slice 4)"]
+        cmds["commands/ — registry, editor commands, menus"]
     end
     pkg["packages/acp-rad — profile as code: schema · markdown · sections · namespace · store · hunks"]
     bridge["apps/bridge — agents.json registry, NDJSON⇄frame, _rad/audit sink"]
@@ -77,7 +77,7 @@ flowchart TD
 | `apps/editor/src/sidebar/` | `store.ts` (reducer over ACP `session/update`s), `convert.ts` (ACP → assistant-ui `ThreadMessageLike`, the only file that knows assistant-ui types), `Sidebar.tsx` (thread, composer, tool cards that *mirror* decisions, audit tab). |
 | `apps/editor/src/audit/log.ts` | `AuditLog`: stamps every consequential event, keeps the in-memory mirror, sends `_rad/audit` up the connection. |
 | `apps/editor/src/fixtures/` + `apps/editor/fixtures/` | Synthetic cases (`meta.json` + `report.md` + `priors/*.md`), house templates, snippets; start-state rule (`demo.start`). |
-| `apps/editor/src/commands/` *(planned)* | One command registry feeding `Commands ▾`, the in-report `/` menu and the composer `/`; deterministic editor commands (document · snippet). See [surface §2](./02-surface-architecture.md#2-surface-map). |
+| `apps/editor/src/commands/` | One command registry feeding `Commands ▾`, the in-report `/` menu and the composer `/`; deterministic editor commands (document · snippet). See [surface §2](./02-surface-architecture.md#2-surface-map). |
 | `packages/acp-rad/src/` | `schema.ts` (zod for `_meta.rad`, statuses, clinical verbs, write outcome, audit record, error codes) · `markdown.ts` (Delta ⇄ canonical Markdown) · `sections.ts` (label-line partition) · `namespace.ts` (virtual paths, RO rules, manifest) · `store.ts` (`createReportStore`) · `hunks.ts` (line diff, `buildHunks`/`applyHunks`). Framework-free; the seed of the standard's reference implementation. |
 | `apps/bridge/` | `src/index.ts`: `GET /acp?agent=<id>` spawns `agents.json[id]`, re-frames NDJSON ⇄ WS frames, intercepts only editor-originated `_rad/audit` → `audit/{acc}.jsonl`; `BRIDGE_TRACE=1`. `scripts/smoke.ts`: headless live tracer. |
 | `agents/rad-agent/src/rad_agent/` | `server.py` (`RadReportAgentServer`) · `permissions.py` (`PermissionRewritingClient`) · `backend.py` (`AcpClientBackend`) · `agent.py` (`build_agent` → `create_deep_agent`) · `config.py` (`RAD_MODEL`) · `prompts/system.md` · `main.py`. stdout is the wire; logs to stderr. |
@@ -181,7 +181,7 @@ sequenceDiagram
 
 Grant rule (`connection.ts`): `final` ⇒ `-32003`; RO path ⇒ `-32003`; grant found and `canonical(content) === expected` ⇒ `applied`; grant found but differs (partial acceptance, or the agent wrote more than it showed) ⇒ `partial` — the buffer keeps the radiologist's per-hunk result; the agent's content never lands directly. No grant ⇒ **unsolicited write** (Level 0 / unasked `write_file`): synthesize hunks from current vs content, render, hold the request until decided, `-32010` if all discarded. Grant read-through lasts ≤ 60 s.
 
-### 6.2 Editor command (deterministic, *planned* slice 4)
+### 6.2 Editor command (deterministic, built slice 4)
 
 ```mermaid
 sequenceDiagram
@@ -201,7 +201,7 @@ Editor commands never touch the agent; they share the overlay machinery of §6.1
 
 ### 6.3 Cancel
 
-Editor sends `session/cancel`; `ProposalStore.cancelAll()` discards rendered hunks and answers every in-flight `request_permission` with `cancelled` (ACP contract); the agent returns `stopReason: cancelled`. *Planned:* visible "stopped" marker on the interrupted turn.
+Editor sends `session/cancel`; `ProposalStore.cancelAll()` discards rendered hunks and answers every in-flight `request_permission` with `cancelled` (ACP contract); the agent returns `stopReason: cancelled`. The interrupted turn shows a *stopped* marker (slice 4).
 
 ### 6.4 QA flag (Level 2 method, *planned* slice 5)
 
@@ -214,8 +214,8 @@ Agent tool `raise_flag(kind, summary, locations)` → `_rad/flag` request → ed
 | Another ACP agent | one entry in `apps/bridge/agents.json`; `?agent=<id>`. Level 0 needs the on-disk mirror + file-watch (slice 7). |
 | Model / provider | `RAD_MODEL` (+ `RAD_MODEL_BASE_URL` for any OpenAI-compatible endpoint); keys via `lb key run`. |
 | New case / template / snippet | drop files under `apps/editor/fixtures/`; the loader globs them; `meta.json` binds the session. |
-| New editor command | one `Command` in the registry (*planned*); pure function over canonical Markdown, unit-tested. |
-| New agent skill | `available_commands_update` from `RadReportAgentServer` + prompt expansion (*planned*); deepagents `skills=` later (routed through a `CompositeBackend` — the ACP backend cannot serve skill files). |
+| New editor command | one entry in `EDITOR_COMMANDS` + a case in `runEditorCommand` (`commands/registry.ts`); pure function over canonical Markdown, unit-tested; `apply.ts` performs the effect. |
+| New agent skill | one `prompts/skills/<name>.md` (frontmatter `description`, `hint`; body = expansion) — advertised and expanded by `RadReportAgentServer`; deepagents `skills=` later (routed through a `CompositeBackend` — the ACP backend cannot serve skill files). |
 | New profile method | `_rad/*` via `ext_method`/`ext_notification` (agent) and generic `onRequest` (editor); schema in `packages/acp-rad`. |
 | ACP v2 | re-expose `ReportStore` as MCP-over-ACP tools; editor and Quill code unchanged. |
 

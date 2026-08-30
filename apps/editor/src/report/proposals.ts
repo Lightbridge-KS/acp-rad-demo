@@ -33,7 +33,10 @@ export type Proposal = {
   baseText: string;
   states: Record<string, HunkState>;
   state: "pending" | "decided" | "applied" | "partial" | "cancelled";
+  /** The agent's offered options — set when its `session/request_permission` arrives. */
   options?: PermissionOption[];
+  /** The permission has been answered on the wire (agent proposals). */
+  answered?: boolean;
   createdAt: string;
 };
 
@@ -100,7 +103,8 @@ export class ProposalStore {
    * match on the path and, when given, the exact old/new snippets.
    */
   matchPending(path: string, oldText?: string | null, newText?: string | null): Proposal | undefined {
-    const candidates = this.pending().filter((p) => p.origin === "agent" && p.path === path && !p.options);
+    // Pending, or already decided by a quick radiologist before the request arrived (parallel edits).
+    const candidates = this.list().filter((p) => p.origin === "agent" && p.path === path && !p.options && (p.state === "pending" || p.state === "decided"));
     if (candidates.length === 0) return undefined;
     if (oldText == null && newText == null) return candidates[candidates.length - 1];
     const want = buildHunks(oldText ?? "", newText ?? "").map((h) => `${h.oldLines.join("\n")}→${h.newLines.join("\n")}`).join("|");
@@ -247,7 +251,7 @@ export class ProposalStore {
   }
 
   private answer(p: Proposal): void {
-    if (p.state !== "pending") return;
+    if (p.state !== "pending" && !(p.state === "decided" && !p.answered)) return;
     if (p.origin === "local") {
       // Nothing on the wire and no grant: the buffer already holds the radiologist's decisions.
       p.state = "applied";
@@ -255,6 +259,10 @@ export class ProposalStore {
       return;
     }
     p.state = "decided";
+    // Decided before the agent asked (it batches parallel edits): the answer — and the grant —
+    // wait for `awaitPermission`, which calls back here with the real options.
+    if (!p.options) return;
+    p.answered = true;
     const accepted = p.hunks.filter((h) => p.states[h.id] === "accept" || p.states[h.id] === "accept_edit").map((h) => h.id);
     const discarded = p.hunks.filter((h) => p.states[h.id] === "reject" || p.states[h.id] === "conflict").map((h) => h.id);
     const answer = answerFor(p, accepted.length > 0);

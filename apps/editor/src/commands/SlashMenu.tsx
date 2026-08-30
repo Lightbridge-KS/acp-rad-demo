@@ -211,7 +211,7 @@ export function SlashMenu({ quill, tick, commands, onRun }: Props) {
         transform: above ? "translateY(-100%)" : undefined,
       }}
     >
-      <CommandMenu groups={resolved.groups} highlighted={highlighted} onHighlight={setHighlighted} onSelect={select} />
+      <CommandMenu groups={resolved.groups} query={state.query} highlighted={highlighted} onHighlight={setHighlighted} onSelect={select} />
     </div>
   );
 }

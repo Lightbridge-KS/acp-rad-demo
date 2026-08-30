@@ -9,6 +9,9 @@
  * prompt 2 reads FINDINGS through `fs/read_text_file`; prompt 3 proposes an impression edit
  * (`tool_call` with a diff → `session/request_permission` offering `accept_edit` → the
  * smoke accepts → `fs/write_text_file` lands the bullet), and every turn ends with `end_turn`.
+ * Stage 2 (slice 4): a second session on the CT chest case with priors — the agent advertises
+ * its skills (`available_commands_update`) and `/compare` lands both prior dates on the
+ * COMPARISON line.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -19,6 +22,7 @@ import { RadError, canonicalize, createReportStore, markdownToDelta, sliceLines,
 
 const url = process.env.BRIDGE_URL ?? "ws://localhost:8787/acp?agent=rad";
 const ACCESSION = "ACC0000001";
+const CHEST_ACCESSION = "ACC0000012";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FX = path.resolve(here, "../../editor/fixtures");
 const read = (rel: string) => readFileSync(path.join(FX, rel), "utf8");
@@ -29,20 +33,41 @@ const collection = (dir: string) =>
       .map((f) => [f.replace(/\.md$/, ""), read(`${dir}/${f}`)]),
   );
 
-// Start state like the editor's demo: impression blanked so there is something to draft.
-const startMd = read("ct-brain-er-stroke/report.md").replace(/(\*\*IMPRESSION:\*\*\n)[\s\S]*$/, "$1- ...\n");
-let ops: Op[] = markdownToDelta(startMd);
+/** One case's live buffer + store, the way the editor holds them. */
+function caseStore(caseId: string, accession: string, start: (md: string) => string = (md) => md) {
+  let ops: Op[] = markdownToDelta(start(read(`${caseId}/report.md`)));
+  const priorsDir = path.join(FX, caseId, "priors");
+  let priors: Record<string, string> = {};
+  let priorsIndex: string | undefined;
+  try {
+    for (const f of readdirSync(priorsDir).filter((f) => f.endsWith(".md"))) {
+      if (f === "index.md") priorsIndex = read(`${caseId}/priors/${f}`);
+      else priors[f.replace(/\.md$/, "")] = read(`${caseId}/priors/${f}`);
+    }
+  } catch {
+    priors = {};
+  }
+  const store = createReportStore({
+    accession,
+    getOps: () => ops,
+    meta: JSON.parse(read(`${caseId}/meta.json`)) as Record<string, unknown>,
+    priors,
+    ...(priorsIndex !== undefined ? { priorsIndex } : {}),
+    templates: collection("templates"),
+    snippets: collection("snippets"),
+  });
+  return { store, setOps: (next: Op[]) => (ops = next) };
+}
 
-const store = createReportStore({
-  accession: ACCESSION,
-  getOps: () => ops,
-  meta: JSON.parse(read("ct-brain-er-stroke/meta.json")) as Record<string, unknown>,
-  templates: collection("templates"),
-  snippets: collection("snippets"),
-});
+// Start state like the editor's demo: impression blanked so there is something to draft.
+const brain = caseStore("ct-brain-er-stroke", ACCESSION, (md) => md.replace(/(\*\*IMPRESSION:\*\*\n)[\s\S]*$/, "$1- ...\n"));
+const chest = caseStore("ct-chest-er-nodule-prior", CHEST_ACCESSION);
+let active = brain;
+const store = { read: (p: string) => active.store.read(p), assertWritable: (p: string) => active.store.assertWritable(p), reportMarkdown: () => active.store.reportMarkdown() };
 
 const counts = { fsRead: 0, fsWrite: 0, readToolCalls: 0, editToolCalls: 0, diffs: 0, permissions: 0 };
 const offered: string[][] = [];
+let advertised: string[] = [];
 let text = "";
 const say = (s: string) => process.stderr.write(`${s}\n`);
 const rethrow = (err: unknown): never => {
@@ -65,6 +90,9 @@ const conn = acp
       say(`[tool_call] ${u.kind} ${u.title}`);
     } else if (u.sessionUpdate === "tool_call_update") {
       if (Array.isArray(u.content) && u.content.some((c) => (c as { type?: string }).type === "diff")) counts.diffs += 1;
+    } else if (u.sessionUpdate === "available_commands_update") {
+      advertised = u.availableCommands.map((c) => c.name);
+      say(`[available_commands_update] ${advertised.join(", ")}`);
     } else {
       say(`[update] ${u.sessionUpdate}`);
     }
@@ -89,9 +117,9 @@ const conn = acp
     // The editor would apply the accepted hunks; the smoke accepts everything, so the write IS the new section.
     const current = store.read(ctx.params.path);
     if (ctx.params.path.endsWith("/report.md")) {
-      ops = markdownToDelta(ctx.params.content);
+      active.setOps(markdownToDelta(ctx.params.content));
     } else {
-      ops = markdownToDelta(store.reportMarkdown().replace(current, canonicalize(ctx.params.content)));
+      active.setOps(markdownToDelta(store.reportMarkdown().replace(current, canonicalize(ctx.params.content))));
     }
     return { _meta: { rad: { outcome: "applied" } } };
   })
@@ -120,7 +148,7 @@ try {
   say(`[init] agent=${init.agentInfo?.name ?? "?"} _meta=${JSON.stringify(init._meta)}`);
   const radCaps = (init._meta as Record<string, unknown> | undefined)?.rad;
 
-  const manifest = store.manifest();
+  const manifest = active.store.manifest();
   const session = await conn.agent.request(acp.methods.agent.session.new, {
     cwd: `/worklist/${ACCESSION}`,
     mcpServers: [],
@@ -140,10 +168,10 @@ try {
   });
   say(`[session] ${session.sessionId} manifest=${manifest.length} files`);
 
-  const prompt = async (label: string, t: string) => {
+  const prompt = async (label: string, t: string, sessionId = session.sessionId) => {
     text = "";
     const r = await conn.agent.request(acp.methods.agent.session.prompt, {
-      sessionId: session.sessionId,
+      sessionId,
       prompt: [{ type: "text", text: t }],
     });
     process.stdout.write("\n");
@@ -170,6 +198,32 @@ try {
   const impression = store.read(`/worklist/${ACCESSION}/sections/impression.md`);
   say(`[impression after] ${JSON.stringify(impression)}`);
 
+  // Stage 2 — a second session on the CT chest case: skills advertised, /compare lands both dates.
+  active = chest;
+  const chestManifest = chest.store.manifest();
+  const chestSession = await conn.agent.request(acp.methods.agent.session.new, {
+    cwd: `/worklist/${CHEST_ACCESSION}`,
+    mcpServers: [],
+    _meta: {
+      rad: {
+        accession: CHEST_ACCESSION,
+        modality: "CT",
+        region: "chest",
+        protocol: "contrast",
+        setting: "ER",
+        reportStatus: "draft",
+        shortPrelim: false,
+        phiBoundary: "research_synthetic",
+        manifest: chestManifest,
+      },
+    },
+  });
+  say(`[session 2] ${chestSession.sessionId} manifest=${chestManifest.length} files (${Object.keys(chest.store).length})`);
+  await new Promise((r) => setTimeout(r, 200)); // the advertisement follows the response
+  const r4 = await prompt("prompt 4", "/compare", chestSession.sessionId);
+  const comparison = store.read(`/worklist/${CHEST_ACCESSION}/sections/comparison.md`);
+  say(`[comparison after] ${JSON.stringify(comparison)}`);
+
   const checks = {
     radCapsAdvertised: radCaps !== undefined,
     pong,
@@ -182,6 +236,9 @@ try {
     fsWriteServed: counts.fsWrite >= 1,
     impressionLanded: impression.includes(BULLET) && !impression.includes("- ..."),
     endTurn: r3.stopReason === "end_turn",
+    skillsAdvertised: ["compare", "impression", "proofread"].every((n) => advertised.includes(n)),
+    compareLanded: comparison.includes("12/06/2025") && comparison.includes("20/02/2026") && !comparison.includes("____"),
+    compareEndTurn: r4.stopReason === "end_turn",
   };
   say(`[checks] ${JSON.stringify(checks)}`);
   const ok = Object.values(checks).every(Boolean);

@@ -43,8 +43,8 @@ Agent logs go to **stderr** (shown in the bridge's terminal); stdout is the JSON
 Keys never live in the repo. Inject personal keys per run:
 
 ```sh
-lb key run --env openai-personal -- just dev
-lb key run --env anthropic-personal -- env RAD_MODEL=anthropic:claude-sonnet-5 just dev
+lb key run openai-personal -- just dev
+lb key run anthropic-personal -- env RAD_MODEL=anthropic:claude-sonnet-5 just dev
 RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just dev   # offline, Ollama
 ```
 
@@ -55,6 +55,8 @@ A `.env` in `agents/rad-agent/` is also read (`python-dotenv`), gitignored.
 ```sh
 just check            # dry: tsc, vitest, ruff, mypy, pytest
 just smoke            # live: starts the bridge, runs a headless ACP client end-to-end (needs an LLM)
+
+`just smoke` starts its own bridge on 8787 — stop `just dev` first, or run `cd apps/bridge && node scripts/smoke.ts` against the running bridge (which already carries the key). Stage 2 of the smoke opens a second session on `ct-chest-er-nodule-prior` and checks the skills advertisement and `/compare`.
 ```
 
 ## Tracing the wire

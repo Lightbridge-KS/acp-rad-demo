@@ -68,7 +68,7 @@ describe("groupsForQuery", () => {
     skills: [{ id: "compare", kind: "skill", description: "Compare" }],
   };
   it("filters on a bare name and narrows to the exact command once an argument follows", () => {
-    expect(groupsForQuery(all, "te").groups.editor.map((c) => c.id)).toEqual(["template"]);
+    expect(groupsForQuery(all, "te").groups.suggested.map((c) => c.id)).toEqual(["template"]);
     expect(groupsForQuery(all, "template cxr-pa")).toEqual({ groups: { suggested: [], editor: [all.editor[0]], skills: [] }, arg: "cxr-pa" });
     expect(groupsForQuery(all, "compare ACC1").groups.skills).toHaveLength(1);
     expect(groupsForQuery(all, "nope arg").groups).toEqual({ suggested: [], editor: [], skills: [] });

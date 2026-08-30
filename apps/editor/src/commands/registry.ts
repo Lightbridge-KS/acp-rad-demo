@@ -70,12 +70,37 @@ export function listCommands(ctx: CommandContext): CommandGroups {
   return { suggested, editor, skills };
 }
 
-/** Filter every group by a typed query (id, description); an empty query keeps everything. */
-export function filterCommands(groups: CommandGroups, query: string): CommandGroups {
+/**
+ * How well a command answers a typed query: 0 exact id · 1 id prefix · 2 id substring ·
+ * 3 description; −1 no match. The id always outranks the description, so `/impression`
+ * is never beaten by a snippet whose description mentions the impression head.
+ */
+export function matchScore(c: Command, query: string): number {
   const q = query.trim().toLowerCase();
+  if (!q) return 3;
+  const id = c.id.toLowerCase();
+  if (id === q) return 0;
+  if (id.startsWith(q)) return 1;
+  if (id.includes(q)) return 2;
+  if (c.description.toLowerCase().includes(q)) return 3;
+  return -1;
+}
+
+/**
+ * Filter by a typed query. An empty query keeps the groups; a query collapses them into one
+ * ranked list (in `suggested`, shown as *Matches*), deduplicated, best match first — so Enter
+ * always takes the best match, whatever group it came from.
+ */
+export function filterCommands(groups: CommandGroups, query: string): CommandGroups {
+  const q = query.trim();
   if (!q) return groups;
-  const hit = (c: Command) => c.id.toLowerCase().includes(q) || c.description.toLowerCase().includes(q);
-  return { suggested: groups.suggested.filter(hit), editor: groups.editor.filter(hit), skills: groups.skills.filter(hit) };
+  const seen = new Set<string>();
+  const ranked = flattenCommands(groups)
+    .map((c, order) => ({ c, score: matchScore(c, q), order }))
+    .filter(({ c, score }) => score >= 0 && !seen.has(c.id) && seen.add(c.id))
+    .sort((a, b) => a.score - b.score || a.order - b.order)
+    .map(({ c }) => c);
+  return { suggested: ranked, editor: [], skills: [] };
 }
 
 /** Keyboard order: Suggested, then Editor, then Skills. */
