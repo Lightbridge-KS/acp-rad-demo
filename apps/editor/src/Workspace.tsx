@@ -369,7 +369,8 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
     ref,
     () => ({
       dirty: () => ({
-        pending: proposals.pending().length,
+        // Pending *changes* (hunks), the same number the header pill shows.
+        pending: proposals.pending().reduce((n, p) => n + p.hunks.filter((h) => p.states[h.id] === "pending").length, 0),
         unreviewed: quill ? unreviewedLineCount(currentOps(quill)) : 0,
         running: state.isRunning,
         flags: flags.open().length,

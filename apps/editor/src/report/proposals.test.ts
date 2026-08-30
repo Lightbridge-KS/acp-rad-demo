@@ -16,6 +16,14 @@ const LEVEL0: PermissionOption[] = [
 ];
 
 describe("ProposalStore", () => {
+  it("a write that already matches the buffer registers nothing pending (an idempotent /template must not dirty the case)", () => {
+    const store = new ProposalStore(ACC);
+    const p = store.fromLocal("cmd-template-1", "/worklist/ACC1/report.md", CURRENT, CURRENT, { command: "template" })!;
+    expect(p.hunks).toHaveLength(0);
+    expect(p.state).toBe("applied");
+    expect(store.pending()).toEqual([]);
+  });
+
   it("builds hunks from an edit diff and answers when all are decided", async () => {
     const store = new ProposalStore(ACC);
     const p = store.fromDiff("call-1", { path: SECTION, oldText: "- ...", newText: "- A.\n- B." }, CURRENT)!;

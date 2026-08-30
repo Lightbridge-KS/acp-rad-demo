@@ -233,7 +233,8 @@ export class ProposalStore {
       hunks,
       baseText,
       states: Object.fromEntries(hunks.map((h) => [h.id, "pending" as HunkState])),
-      state: "pending",
+      // Nothing to decide when the write already matches the buffer: never leave it pending.
+      state: hunks.length === 0 ? "applied" : "pending",
       createdAt: new Date().toISOString(),
     };
     this.proposals.set(toolCallId, p);
