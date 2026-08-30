@@ -22,21 +22,22 @@ A radiology report editor in the browser (QuillJS) hosting an AI agent through t
 >
 > **INV-2 (Non-interference).** The radiologist's typing never blocks and is never overwritten. A pending proposal is an *overlay* anchored by `(section, old lines)`, never by offsets; if the radiologist's edits make the anchor unfindable the hunk conflicts and the agent re-reads and re-proposes.
 
-**Trust boundary.** Everything that enforces INV-1, read-only paths, the `final` lock, and the audit lives in `apps/editor`. The agent is untrusted; the bridge is a pipe. No PHI ever — fixtures are synthetic (`phiBoundary: research_synthetic`).
+**Trust boundaries.** Everything that enforces INV-1, read-only paths, the `final` lock, and audit stamping lives in `apps/editor`. The agent is untrusted. For the anonymous public Vercel deployment the bridge additionally owns same-origin validation, global capacity, and durable audit delivery. It still does not interpret ACP except for the editor-originated `_rad/audit` notification. No PHI ever — fixtures are synthetic (`phiBoundary: research_synthetic`). See ADR 0003.
 
 ## 2. System Context (C1)
 
 ```mermaid
 flowchart LR
     rad([Radiologist])
-    subgraph Demo["ACP-Rad Demo (localhost)"]
+    subgraph Demo["ACP-Rad Demo (local or one Vercel origin)"]
         editor["apps/editor — browser, the ACP Client"]
         bridge["apps/bridge — WS ⇄ stdio"]
         agent["agents/rad-agent — the ACP Agent (Level 2)"]
     end
     l0["Level 0 agents (stretch): claude-agent-acp · gemini --experimental-acp"]
-    llm[("LLM provider: Ollama · OpenAI · Anthropic")]
-    audit[("audit/{accession}.jsonl")]
+    llm[("LLM: local/direct provider · Vercel AI Gateway")]
+    redis[("Managed Redis: leases · audit")]
+    audit[("Local audit/{accession}.jsonl")]
     fixtures[("fixtures/: cases · priors · templates · snippets")]
     rad -->|types, prompts, signs off| editor
     editor <-->|ACP over WebSocket| bridge
@@ -44,6 +45,7 @@ flowchart LR
     bridge <-.->|stdio| l0
     agent --> llm
     bridge --> audit
+    bridge --> redis
     fixtures --> editor
 ```
 
@@ -66,7 +68,7 @@ flowchart TD
     ragent["agents/rad-agent — RadReportAgentServer · AcpClientBackend · PermissionRewritingClient"]
     report --> pkg
     agentc --> pkg
-    agentc <-->|"ws://localhost:8787/acp?agent=rad"| bridge
+    agentc <-->|"same-origin /acp?agent=rad"| bridge
     bridge <-->|stdio| ragent
 ```
 
@@ -79,7 +81,7 @@ flowchart TD
 | `apps/editor/src/fixtures/` + `apps/editor/fixtures/` | Synthetic cases (`meta.json` + `report.md` + `priors/*.md`), house templates, snippets; start-state rule (`demo.start`). |
 | `apps/editor/src/commands/` | One command registry feeding `Commands ▾`, the in-report `/` menu and the composer `/`; deterministic editor commands (document · snippet). See [surface §2](./02-surface-architecture.md#2-surface-map). |
 | `packages/acp-rad/src/` | `schema.ts` (zod for `_meta.rad`, statuses, clinical verbs, write outcome, audit record, error codes) · `markdown.ts` (Delta ⇄ canonical Markdown) · `sections.ts` (label-line partition) · `namespace.ts` (virtual paths, RO rules, manifest) · `store.ts` (`createReportStore`) · `hunks.ts` (line diff, `buildHunks`/`applyHunks`). Framework-free; the seed of the standard's reference implementation. |
-| `apps/bridge/` | `src/index.ts`: `GET /acp?agent=<id>` spawns `agents.json[id]`, re-frames NDJSON ⇄ WS frames, intercepts only editor-originated `_rad/audit` → `audit/{acc}.jsonl`; `BRIDGE_TRACE=1`. `scripts/smoke.ts`: headless live tracer. |
+| `apps/bridge/` | `src/server.ts`: anonymous `/acp?agent=<id>` validates Origin, atomically acquires a global lease, then spawns `agents.json[id]` and re-frames NDJSON ⇄ WS frames. `_rad/audit` → Redis in Vercel or `audit/{acc}.jsonl` locally; `/health` checks the admission store. `src/config.ts` makes Vercel startup fail closed; `BRIDGE_TRACE=1`. `scripts/smoke.ts`: headless live tracer. |
 | `agents/rad-agent/src/rad_agent/` | `server.py` (`RadReportAgentServer`) · `permissions.py` (`PermissionRewritingClient`) · `backend.py` (`AcpClientBackend`) · `flags.py` (`raise_flag` tool → `_rad/flag`) · `skills.py` · `agent.py` (`build_agent` → `create_deep_agent`) · `config.py` (`RAD_MODEL`) · `prompts/system.md`, `prompts/skills/*.md` · `main.py`. stdout is the wire; logs to stderr. |
 
 ## 4. Components (C3) — inside `apps/editor`
@@ -249,7 +251,7 @@ The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `L
 | Write outcome | `WriteTextFileResponse._meta.rad = {outcome: applied \| partial, accepted, discarded}` — new in the PoC. |
 | `_rad/flag` (§8.2) | Agent → Client request `{sessionId, kind, summary ≤ 500, locations[{path, line?}]}`; response `{outcome: "acknowledged"}` means **the Client received and marked it** — `dismissed` and the human-on-the-wire acknowledgement are dropped (KS, 2026-08-30). `line` = 1-based line of the file as the agent read it. Requires `flags` both ways; the agent advertises `/qa` only to a client that negotiated it. |
 | Errors (§10) | `-32003` forbidden (RO/final) · `-32004` not found · `-32010` proposal rejected · `-32011` canonicalization conflict. |
-| Audit (§9.2) | Stamped by the Client, persisted by the bridge as JSONL; never trusted from the agent. |
+| Audit (§9.2) | Stamped by the Client; bridge persists Redis lists with a rolling 7-day TTL on Vercel and JSONL locally; never trusted from the agent. |
 | Proposal-doc fixes pending | grammar → label-lines; drop §8.3; status enum; "Flutter Quill" → QuillJS; `ramaai-dev` → `radrama-ai`. |
 
 Profile wording to carry into the standard: *Clients MAY offer deterministic commands; Agents advertise theirs.*

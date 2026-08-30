@@ -1,5 +1,5 @@
 ---
-summary: Data architecture of the ACP-Rad Demo — where report data rests (the live Quill Delta as the one system of record, the virtual namespace it is served through, fixtures, proposals/grants, the audit JSONL) and how it moves (canonicalization, fs/* reads, diff → hunks → overlay → decision → grant → write outcome, the audit lineage); ownership, keys, lifetimes, PHI boundary, open questions.
+summary: Data architecture of the ACP-Rad Demo — where report data rests (the live Quill Delta as the one system of record, the virtual namespace it is served through, fixtures, proposals/grants, and local JSONL or hosted Redis audit) and how it moves (canonicalization, fs/* reads, diff → hunks → overlay → decision → grant → write outcome, the audit lineage); ownership, keys, lifetimes, PHI boundary, open questions.
 read_when: Asking "where does X live, who writes it, who reads it, how stale is it"; adding a store, a fixture kind, an audit event or a `_meta.rad` field; reasoning about the grant window or agent-side staleness; before designing the flag store (slice 5) or the worklist / persistence (slice 6).
 ---
 
@@ -10,7 +10,7 @@ read_when: Asking "where does X live, who writes it, who reads it, how stale is 
 
 ## 1. Overview
 
-The system manages **one radiology report per study** (keyed by accession), the reference material around it (study metadata, priors, templates, snippets), the agent's **proposals** and the radiologist's **decisions** on them, and the **audit trail** of all of it. There is no database: the report lives in the browser as a Quill Delta, is served to the agent as canonical Markdown through a virtual file namespace, and the only thing written to disk at runtime is the audit log. **Nothing the agent sends is ever stored as report content** — its writes are *compared* with what the radiologist decided, never applied (INV-1).
+The system manages **one radiology report per study** (keyed by accession), the reference material around it (study metadata, priors, templates, snippets), the agent's **proposals** and the radiologist's **decisions** on them, and the **audit trail** of all of it. The report itself has no database: it lives in the browser as a Quill Delta and is served to the agent as canonical Markdown through a virtual file namespace. Public-demo operations use Redis only for anonymous connection admission and expiring audit records; Redis never stores the report. **Nothing the agent sends is ever stored as report content** — its writes are *compared* with what the radiologist decided, never applied (INV-1).
 
 Classification evidence, one line per facet:
 
@@ -19,7 +19,7 @@ Classification evidence, one line per facet:
 | In-memory document | `quill.getContents().ops` is the report; `createReportStore` reads it live on every call (`apps/editor/src/report/reportStore.ts`, `packages/acp-rad/src/store.ts`). No save, no `localStorage`: a reload restores the fixture. |
 | Schema-on-read namespace | `packages/acp-rad/src/namespace.ts` resolves `/worklist/…`, `/priors/…`, `/templates/…`, `/snippets/…` per read; sections are computed by `splitSections`, not stored. |
 | File fixtures | `apps/editor/fixtures/**` loaded at build time by `import.meta.glob` (`apps/editor/src/fixtures/index.ts`); `apps/bridge/scripts/smoke.ts` reads the same tree from disk. |
-| Event stream + append-only log | ACP JSON-RPC frames; `ProposalStore` events; the sidebar reducer; `AuditLog` → `_rad/audit` → `audit/{accession}.jsonl` (`apps/bridge/src/index.ts` `persistAudit`). |
+| Event stream + append-only log | ACP JSON-RPC frames; `ProposalStore` events; the sidebar reducer; `AuditLog` → `_rad/audit` → Redis list on Vercel or `audit/{accession}.jsonl` locally (`apps/bridge/src/audit.ts`). |
 
 Tech: zod 4 schemas (`packages/acp-rad/src/schema.ts`), `quill-delta` ops, canonical Markdown (`markdown.ts`), JSONL; on the agent side pydantic models from `agent-client-protocol` 0.12.1 and a LangGraph `MemorySaver` thread per session. Emphasis follows the type: **§4 motion** and **§6 access patterns** carry the weight; the schema at rest (§3) is small.
 
@@ -39,6 +39,7 @@ flowchart LR
         sb[("sidebar state<br/>mirror of session/update")]
         al[("AuditLog.records")]
     end
+    redis[("managed Redis<br/>leases · 7-day audit")]
     bridge["apps/bridge<br/>pipe; persists _rad/audit"]
     subgraph agent["agents/rad-agent — process memory, one WS connection"]
         sr[("session_rad<br/>accession · manifest")]
@@ -57,6 +58,7 @@ flowchart LR
     bridge -->|"session/update"| sb
     al -->|"_rad/audit"| bridge
     bridge --> auditf
+    bridge --> redis
     prompts --> ms
     rs -->|"manifest at session/new"| sr
 ```
@@ -67,16 +69,18 @@ flowchart LR
 | `ReportStore` | stateless view | nothing — resolves virtual paths to live content | — | `connection.ts` (`fs/*`), editor commands | — |
 | `ProposalStore` | in-memory, browser | `Proposal` (hunks, per-hunk states, options), `Grant` by path, permission waiters | `connection.ts`, `App.tsx`, `commands/apply.ts` | `App.tsx`, `HunkControls`, `connection.ts` | page load; a grant ≤ 60 s or first write |
 | `FlagStore` (`report/flags.ts`) | in-memory, browser | `Flag {id, kind, summary, locations, state: open \| acknowledged, raisedAt}`; the mark `ai-flag` = id on the buffer line | `connection.ts` `onFlag` → `App.tsx` `raiseFlag`; `acknowledgeFlag` | sidebar flag cards, header count, (slice 6) the QA gate | page load; **never** cancelled by the agent |
-| Sidebar state (`SidebarState`) | in-memory reducer, browser | transcript messages, tool calls with a *mirror* of each permission outcome, plan, advertised skills, unknown update kinds | reducer over `session/update` + editor dispatches | `Sidebar.tsx` via `convert.ts` | page load; `reset` on reconnect |
+| Sidebar state (`SidebarState`) | in-memory reducer, browser | transcript messages, tool calls with a *mirror* of each permission outcome, plan, advertised skills, unknown update kinds | reducer over `session/update` + editor dispatches | `Sidebar.tsx` via `convert.ts` | page load; preserved across manual reconnect |
 | `AuditLog.records` | in-memory array, browser | every `AuditRecord` of this page load | `audit.record(…)` | Sidebar *Audit* tab | page load |
 | `audit/{accession}.jsonl` | append-only file on the bridge host | one `AuditRecord` per line, one file per accession, across sessions and page loads | bridge `persistAudit` | humans (`tail`, `jq`); nothing in-app | forever; gitignored (`audit/`) |
+| Redis `acp-rad:{environment}:audit:{accession}` | managed list | one serialized `AuditRecord` per entry | Vercel bridge | operators through Upstash; nothing in-app | rolling 7-day TTL |
+| Redis lease key | managed sorted set | anonymous open WebSocket leases | Vercel bridge Lua/commands | bridge admission and heartbeat | 90 s, renewed every 30 s |
 | `apps/editor/fixtures/**` | files in the repo | cases (`meta.json`, `report.md`, `priors/*.md`, `priors/index.md`), `templates/*.md`, `snippets/*.md` | humans | Vite build, `smoke.ts` | repo |
 | `prompts/system.md`, `prompts/skills/*.md` | files in the repo | system prompt, skill expansions | humans | `agent.py`, `skills.py` at process start | repo |
 | `RadReportAgentServer.session_rad` | process memory, agent | `session_id → _meta.rad` of `session/new` (accession, manifest, reportStatus snapshot, …) | `new_session` | `_build_agent` | agent process = one WS connection |
 | `MemorySaver` (LangGraph) | process memory, agent | one thread per session: the full message history, including every file content returned by `fs/read_text_file` | LangGraph | model context assembly | agent process |
-| Environment (`RAD_MODEL`, `RAD_MODEL_BASE_URL`, provider keys, `.env`) | config | model selection | `lb key run`, `.env` (gitignored) | `config.py` | process |
+| Environment (`RAD_MODEL`, `RAD_MODEL_BASE_URL`, provider/Gateway keys, Redis credentials, `.env`) | config | model and public-demo controls | Vercel encrypted environment or local `.env` (gitignored) | bridge startup, `config.py` | process/deployment |
 
-Not a store: the bridge keeps only a partial-line buffer (`pending`) between stdout chunks.
+Not content stores: the bridge keeps a partial-line buffer (`pending`) between stdout chunks and local handles for sockets/processes. Redis owns cross-instance admission authority; neither bridge memory nor Redis holds report content.
 
 ## 3. Data Models / Schema
 
@@ -112,7 +116,7 @@ All wire shapes are zod schemas in `packages/acp-rad/src/schema.ts`; editor-only
 | `CaseMeta` (`commands/meta.ts`) | loose `{title?, patient{sex?, ageBand?}, study{template?, doseMgy?, doseMgycm?, date?}}` — unknown keys pass through | — | served verbatim as `/worklist/{acc}/meta.json`; read by `/template` |
 | `Focus` / `RadPromptMeta` | `{focus?: {section, cursorOffset, selection}}` | — | declared for `session/prompt._meta.rad`; **not sent yet** (`connection.ts` prompts without `_meta`) |
 | `RadWriteOutcome` | `{outcome: applied \| partial, toolCallId?, accepted?[], discarded?[]}` | `toolCallId` | `fs/write_text_file` response `_meta.rad` |
-| `AuditRecord` | `{ts, sessionId, accession, actor{userId, role}, agent{name, version?, level}, event, path?, toolCallId?, hunkId?, argsHash?, outcome?}` | `(accession, ts)` | `_rad/audit` params → one JSONL line |
+| `AuditRecord` | `{ts, sessionId, accession, actor{userId, role}, agent{name, version?, level}, event, path?, toolCallId?, hunkId?, argsHash?, outcome?}` | `(accession, ts)` | `_rad/audit` params → one Redis-list entry on Vercel or JSONL line locally |
 | `FlagParams` / `FlagLocation` | `{sessionId, kind: discrepancy \| omission \| unsupported \| critical_uncommunicated, summary (1–500), locations[{path, line?}]}` — `line` = 1-based line of the file as the agent read it | — | `_rad/flag` request; response `{outcome: "acknowledged"}` |
 | `Flag` (`report/flags.ts`) | `{id, kind, summary, locations, state: open \| acknowledged, raisedAt, acknowledgedAt?}` | `id` = `f{n}` (client-minted) | `FlagStore`; `ai-flag` attr value on the marked line |
 | `Hunk` (`hunks.ts`) | `{id, oldLines[], newLines[], contextBefore?}` | `id` = `p{n}-h{k}` | inside a `Proposal`; overlay attr values key on it |
@@ -250,7 +254,7 @@ Where the bytes end up: the bullet exists in the Quill Delta because the radiolo
 
 ### 4.3 Second lineage — an audit record
 
-`audit.record(event, fields)` → stamped with the bound context (`sessionId`, `accession`, actor from the header's role toggle — `{userId: "demo-<role>", role: resident | attending}` (`AuditLog.setActor`, its own field because `bind` replaces the context; the pre-slice-6 default `radiologist` survives in old JSONL) —, `agent{name, version, level}`) → pushed to `records` (the sidebar's *Audit* tab) → `conn.agent.notify("_rad/audit", record)` → WebSocket frame → bridge `ws.on("message")`: `text.includes("_rad/audit") && persistAudit(text)` → `appendFileSync(audit/{accession}.jsonl)` and **the frame is dropped** — it never reaches the agent. Records made before `bind` (an editor command run while connecting) are queued and flushed with their original `ts`. Persistence is best-effort: a sink failure is swallowed and the in-memory record remains the page's truth.
+`audit.record(event, fields)` → stamped with the bound context (`sessionId`, `accession`, actor from the header's role toggle — `{userId: "demo-<role>", role: resident | attending}` —, `agent{name, version, level}`) → pushed to `records` (the sidebar's *Audit* tab) → `conn.agent.notify("_rad/audit", record)` → WebSocket frame → `createAuditWriter.persist` → `RPUSH` plus a refreshed 7-day `EXPIRE` in Vercel, or async append to `audit/{accession}.jsonl` locally; **the frame is dropped** and never reaches the agent. Records made before `bind` are queued and flushed with their original `ts`. Persistence remains best-effort: a sink failure is logged and the in-memory record remains the page's truth.
 
 Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session.new` · `session.set_mode` · `session.cancel` · `fs.read` (outcome `base-while-granted` when a grant is open) · `fs.write.applied` · `fs.write.partial` · `fs.write.refused` · `fs.write.rejected` · `fs.write.unsolicited` · `proposal.received` · `permission.request` · `permission.accept` · `permission.accept_edit` · `permission.reject` · `permission.cancelled` · `permission.unmatched` · `hunk.accept` · `hunk.accept_edit` · `hunk.reject` · `review.cleared` · `command.<id>` (outcome `skill` · `instant` · `already present` · `proposal · n hunks`) · `short_prelim.folded`. Slice 5: `flag.raised` (`flagId`, `path`, outcome = kind, or `kind · line not found`) · `flag.acknowledged` (`flagId`). Slice 6: `qa.refused` (outcome = the blockers, e.g. `2 pending changes · 3 blanks left`) · `qa.passed` · `qa.overridden` (`flagIds`) · `qa.skipped` (outcome `short_prelim | agent_absent | level | timeout | cancelled | error`) · `status.changed` (outcome = the new status) · `command.qa` (outcome `gate`) · `permission.refused` and `fs.write.refused` (outcome `final | qa`) · `session.config` (outcome `model=<spec>`). With no session (bridge down) records stay queued in `AuditLog.pending` — the panel shows none and nothing is persisted.
 
@@ -272,7 +276,7 @@ Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session
 | Proposals · hunks · decisions | `ProposalStore` | overlay attrs in the Delta (rendering, keyed by hunk id) · sidebar `permission.outcome` (display mirror) | `connection.ts` (from diffs/writes), `apply.ts` (local), radiologist decisions | `HunkControls`, `App.tsx`, `connection.ts` | `markConflicts` reconciles when the Delta cannot host a hunk (INV-2). |
 | Grant | `ProposalStore.grants` keyed by **path** | — | `answer()` on the first accepted hunk | `fs/read` (read-through), `fs/write` (`takeGrant`, single use) | ⚠ One open grant per path — see §8. |
 | Advertised skills | `prompts/skills/*.md` (agent) | sidebar `commands[]` via `available_commands_update` | humans | command menus | — |
-| **Audit trail** | ⚠ two: `AuditLog.records` (page) and `audit/{accession}.jsonl` (durable) | — | `audit.record` · bridge append | *Audit* tab · humans | The JSONL is the durable record but nothing confirms delivery; the in-memory copy dies with the page. One file per accession accumulates across sessions (e.g. 172 lines for `ACC0000001` today) — `sessionId` separates them. |
+| **Audit trail** | `AuditLog.records` (page) plus an environment-specific bridge sink: Redis list on Vercel, JSONL locally | — | `audit.record` · bridge append | *Audit* tab · operators | Delivery is best-effort and unconfirmed; the page copy dies on reload. A local file accumulates across sessions; a hosted list has rolling seven-day expiry. `sessionId` separates sessions. |
 | **Flags** | `FlagStore` | the `ai-flag` mark on the line (rendering; moves with the line, gone with it); sidebar cards | `_rad/flag` via `connection.ts` → `raiseFlag`; radiologist **Acknowledge** | cards, header count, audit; (slice 6) the QA gate | The line anchor is re-derived on arrival by an ordinal walk over the buffer that counts like `canonicalLines`, verified by text, against the text the agent actually read (`peekGrant(path)?.baseText ?? store.read(path)`). An unlocatable line ⇒ card only, audited `line not found`. |
 
 ## 6. Storage & Access
@@ -295,18 +299,18 @@ Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session
 - *Grant read-through* — while a grant is open (≤ 60 s), a read of that path returns `baseText`, not the live buffer: intentional staleness so the agent's read-modify-write reproduces the proposal instead of failing on `old_string`.
 - *Agent writes* — one path per call, whole content; judged by canonical equality with `expected`. No grant ⇒ unsolicited path: hunks synthesized from current vs content, the request held until decided, `-32010` if everything is rejected.
 - *Overlay lookup* — by hunk/proposal id: `data-hunk` / `data-proposal` DOM attributes (`blots.ts`) on the Quill side, attribute scans over `splitLines(ops)` on the pure side.
-- *Audit* — append-only, per accession; read by humans with `tail -f` / `jq`; `BRIDGE_TRACE=1` gives the frame-level companion (method and id only, never params).
+- *Audit* — append-only, per accession; read locally with `tail -f` / `jq` or in hosted operation with Redis `LRANGE` / `TTL`; `BRIDGE_TRACE=1` gives the frame-level companion (method and id only, never params).
 
-**No indexes, no caches.** `ReportStore` recomputes canonical Markdown on every read (`getContents` → strip → serialize → split, O(report)); `buildHunks` is an O(n·m) line LCS over one section. Both are cheap because reports are small — the same reason deepagents' spill-to-disk is disabled (`tool_token_limit_before_evict=None`).
+**No report indexes or caches.** `ReportStore` recomputes canonical Markdown on every read (`getContents` → strip → serialize → split, O(report)); `buildHunks` is an O(n·m) line LCS over one section. Redis is an operational coordination store, not a content cache.
 
 ## 7. Lifecycle & Governance
 
 - **Schema evolution.** `PROFILE_VERSION = "0.1"` travels as `_meta.rad.profileVersion` in both directions. There is no database and no migration tool; the zod schemas *are* the contract, parsed tolerantly (`readRadAgentCaps` degrades a malformed block to Level 0; `zCaseMeta` is loose and forwards unknown keys). Deltas against the profile proposal draft are ledgered in design 01 §8.
-- **Lifetimes.** Buffer, proposals, sidebar and in-memory audit live one page load (dev StrictMode opens and immediately closes a first connection — expected). Agent memory lives one WebSocket connection: the bridge kills the subprocess on socket close, and `session/load` is out of v0.1, so a reload is a new session with a fresh thread. A grant lives 60 s or until the first write. The audit JSONL lives forever: append-only, no rotation, no purge, gitignored.
-- **Retention / deletion.** None declared; nothing is soft-deleted. `_playground/`, `_temp/`, `.env` are gitignored.
+- **Lifetimes.** Buffer, transcript, flags, proposals, and in-memory audit live one page load and survive a manual agent reconnect. Agent memory lives one WebSocket connection: the bridge kills the subprocess on socket close, so reconnect is a fresh thread. Unfinished proposals are cancelled on disconnect. A grant lives 60 s or until the first write. Local audit JSONL is unbounded; hosted Redis audit expires seven days after the most recent append for that accession.
+- **Retention / deletion.** Hosted audit and operational Redis keys expire automatically; local JSONL has no automatic purge. `_playground/`, `_temp/`, `.env` are gitignored.
 - **Undo.** Quill `history.userOnly: true` — overlay and decision ops are outside the undo stack, so ⌘Z cannot "un-accept" a hunk; only the radiologist's own typing is undoable.
 - **Write lock.** `connection.ts` `refuseReason()` ∈ {`final`, `qa`}: `fs/write_text_file` → `-32003` (audited `fs.write.refused`), `session/request_permission` → the agent's *reject* option before any proposal is matched (`permission.refused`), and `Workspace.onUpdate` renders no proposal from the diff. `store.assertWritable` still refuses `final` on its own. Transitions run through the QA gate (04 §3.5); at `final` Quill is disabled and editor commands are hidden.
-- **PHI.** Every fixture declares `phiBoundary: research_synthetic`. `meta.json` carries only age band, sex, modality, region, protocol, setting, dose and template id; `study.date` is annotated in `commands/meta.ts` as an identifier in real deployments. No names, HN or DOB exist anywhere in the tree. Actor identity is a stub (`demo-radiologist` / `radiologist`) — there is no authentication. Level 0 registry agents ship the whole namespace to their vendor (design 03 §9), hence synthetic data only.
+- **PHI and identity.** Every fixture declares `phiBoundary: research_synthetic`. No names, HN or DOB exist anywhere in the tree. Public hosting is anonymous: actor values remain role stubs and cannot attribute an event to a person. Synthetic data only.
 - **Trust.** Audit records are stamped by the client. The bridge persists only frames arriving from the browser side; an agent that emitted `_rad/audit` on stdout would have it forwarded to the browser, which registers no handler for it — ignored. `argsHash` is a 32-bit FNV-1a `fingerprint` of the write content, not the SHA-256 of raw params the proposal §9.2 asks for (PoC simplification, §8).
 - **Prompt-injection posture.** The system prompt declares report content, priors and templates as data, not instructions; nothing else enforces it.
 - **Repository hygiene (found and fixed 2026-08-30).** The root `.gitignore` pattern `audit/` also matched `apps/editor/src/audit/`, leaving `log.ts` — the `AuditLog` source — untracked; anchored to `/audit/` and the file added. Runtime `audit/*.jsonl` stays ignored.

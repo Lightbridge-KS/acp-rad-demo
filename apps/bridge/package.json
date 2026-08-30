@@ -8,9 +8,11 @@
     "dev": "node --watch src/index.ts",
     "start": "node src/index.ts",
     "smoke": "node scripts/smoke.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.3",
     "ws": "^8.21.3"
   },
   "devDependencies": {
@@ -19,6 +21,7 @@
     "@types/ws": "^8.18.1",
     "acp-rad": "workspace:*",
     "typescript": "~6.0.2",
+    "vitest": "^4.1.11",
     "zod": "^4.5.2"
   }
 }

@@ -8,7 +8,8 @@ RAD_MODEL           A single provider string, e.g. ``openai:gpt-5.6-terra`` or
 RAD_MODEL_BASE_URL  If set, the model name after the ``provider:`` prefix is served through
                     ``ChatOpenAI(base_url=…)`` — any OpenAI-compatible endpoint (Ollama, gateways).
                     Global: with a base URL every entry of ``RAD_MODELS`` goes to that endpoint.
-OPENAI_API_KEY      Used with a base URL; falls back to ``"ollama"`` (Ollama ignores it).
+AI_GATEWAY_API_KEY  Preferred credential for a configured OpenAI-compatible base URL.
+OPENAI_API_KEY      Direct-provider/local fallback; then ``"ollama"`` (Ollama ignores it).
 
 The base URL is pinned here on purpose; never read ``OLLAMA_HOST``.
 """
@@ -60,6 +61,8 @@ def resolve_model(spec: str | None = None) -> str | BaseChatModel:
     return ChatOpenAI(
         model=model_name,
         base_url=base_url,
-        api_key=SecretStr(os.environ.get("OPENAI_API_KEY", "ollama")),
+        api_key=SecretStr(
+            os.environ.get("AI_GATEWAY_API_KEY") or os.environ.get("OPENAI_API_KEY") or "ollama"
+        ),
         use_responses_api=False,  # chat/completions is the widely supported shape
     )

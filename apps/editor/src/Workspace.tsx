@@ -69,6 +69,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
   const [proposalList, setProposalList] = useState<Proposal[]>([]);
   const [flagList, setFlagList] = useState<Flag[]>([]);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
   // Report lifecycle (design 02 §5.2): status moves only by the pill's explicit acts through the
@@ -207,7 +208,6 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
     if (!quill || !store) return;
     let cancelled = false;
     setHeader({ status: "connecting" });
-    dispatch({ type: "reset" });
     connectAgent(BRIDGE_URL, fixture.session, store, proposals, audit, {
       onUpdate: (u) => {
         dispatch({ type: "update", update: u });
@@ -241,6 +241,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       onClosed: (reason) => {
         if (cancelled) return; // this effect's own teardown (e.g. StrictMode's first mount)
         agentRef.current = null;
+        dispatch({ type: "disconnect" });
         setHeader((h) => ({ ...h, status: "disconnected", error: reason }));
       },
     })
@@ -254,6 +255,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        dispatch({ type: "disconnect" });
         // A refused WebSocket rejects with the DOM `error` Event, which stringifies to "[object Event]".
         const error = err instanceof Error ? err.message : typeof Event !== "undefined" && err instanceof Event ? `cannot reach the bridge at ${BRIDGE_URL}` : String(err);
         setHeader({ status: "error", error });
@@ -263,7 +265,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       agentRef.current?.close();
       agentRef.current = null;
     };
-  }, [quill, store, fixture, proposals, audit, renderProposal, raiseFlag]);
+  }, [quill, store, fixture, proposals, audit, renderProposal, raiseFlag, connectAttempt]);
 
   const agentPort = useMemo<AgentPort | null>(
     () =>
@@ -622,6 +624,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
         flags={openFlags}
         onAcknowledge={acknowledgeFlag}
         onLocate={locateFlag}
+        onReconnect={() => setConnectAttempt((attempt) => attempt + 1)}
       />
     </div>
   );

@@ -74,6 +74,8 @@ type Props = {
   onAcknowledge?: (flagId: string) => void;
   /** Scroll the report to the flag's line. */
   onLocate?: (flagId: string) => void;
+  /** Explicitly create a fresh ACP and agent session after a disconnect. */
+  onReconnect?: () => void;
 };
 
 const STATUS_DOT: Record<HeaderState["status"], string> = {
@@ -85,7 +87,7 @@ const STATUS_DOT: Record<HeaderState["status"], string> = {
 
 const EMPTY_GROUPS: CommandGroups = { suggested: [], editor: [], skills: [] };
 
-export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand, flags = [], onAcknowledge, onLocate }: Props) {
+export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand, flags = [], onAcknowledge, onLocate, onReconnect }: Props) {
   const runtime = useExternalStoreRuntime<AcpMessage>({
     messages: state.messages,
     isRunning: state.isRunning,
@@ -132,6 +134,16 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
           (model?.current ?? header.model) && <span className="text-xs text-gray-500">· {model?.current ?? header.model}</span>
         )}
         <span className="ml-auto text-xs text-gray-500">{state.isRunning ? "working…" : header.status}</span>
+        {(header.status === "disconnected" || header.status === "error") && onReconnect && (
+          <button
+            type="button"
+            data-testid="reconnect-agent"
+            className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700"
+            onClick={onReconnect}
+          >
+            Reconnect agent
+          </button>
+        )}
       </header>
       <nav className="flex gap-1 border-b border-gray-200 px-2 text-xs">
         {(["chat", "audit"] as const).map((t) => (

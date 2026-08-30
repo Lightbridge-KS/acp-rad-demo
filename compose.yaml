@@ -8,9 +8,12 @@ services:
     init: true
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      ACTIVE_SESSION_LIMIT: "10"
       AUDIT_DIR: /app/audit
       BRIDGE_PORT: "8787"
       BRIDGE_TRACE: ${BRIDGE_TRACE:-0}
+      DEMO_LLM_ENABLED: "true"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       RAD_LOG_LEVEL: ${RAD_LOG_LEVEL:-INFO}
       RAD_MODEL: ${RAD_MODEL:-openai:gpt-5.6-terra}

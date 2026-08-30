@@ -52,6 +52,7 @@ export type SidebarAction =
   | { type: "permission_resolved"; toolCallId: string; optionId: string }
   | { type: "permission_cancelled"; toolCallId: string }
   | { type: "turn_end"; stopReason: string }
+  | { type: "disconnect" }
   | { type: "reset" };
 
 export const initialSidebarState: SidebarState = { messages: [], isRunning: false, plan: [], commands: [], unknown: [] };
@@ -81,6 +82,10 @@ export function sidebarReducer(state: SidebarState, action: SidebarAction): Side
       }));
     case "turn_end":
       return withAssistant({ ...state, isRunning: false }, (m) => ({ ...m, stopReason: action.stopReason }));
+    case "disconnect":
+      return state.isRunning
+        ? withAssistant({ ...state, isRunning: false }, (m) => ({ ...m, stopReason: "error" }))
+        : state;
   }
 }
 

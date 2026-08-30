@@ -42,9 +42,10 @@ just up                    # docker compose up --build
 just down                  # containers/network removed; audit volume retained
 ```
 
-nginx serves one browser origin: `/` is the static editor and `/acp` is upgraded and proxied
-to `bridge:8787`. The editor derives `ws://` or `wss://` from `window.location`; the native
-Vite server proxies the same path during `just dev`. `VITE_BRIDGE_URL` remains an escape hatch.
+nginx serves one browser origin: `/` is the static editor; `/health` and the
+upgraded `/acp` WebSocket proxy to `bridge:8787`. The editor derives `ws://` or `wss://` from
+`window.location`; the native Vite server proxies the same paths during `just dev`.
+`VITE_BRIDGE_URL` remains an escape hatch and is intentionally unset on Vercel.
 
 Compose publishes the app to `127.0.0.1:8080` by default and the bridge to loopback port 8787
 only for the repository smoke client. Override `APP_PORT` or `BRIDGE_HOST_PORT` if those ports
@@ -54,8 +55,9 @@ are occupied. For a Tailscale-only demo, bind the app to that machine's Tailscal
 APP_HOST=<tailscale-ip> just up
 ```
 
-There is **no authentication, TLS termination, or rate limiting**. Keep this deployment on
-localhost or behind Tailscale; it is not a public-Internet deployment. The container registry
+There is **no app-level authentication or TLS termination** in Compose. Keep this deployment on
+localhost or behind Tailscale; the Vercel deployment supplies TLS but is likewise anonymous.
+The one-process memory adapter still limits the bridge to ten agent sockets. The container registry
 contains only `rad-agent`; the deferred Level 0 Claude/Gemini agents are intentionally absent.
 
 Provider variables are read from `.env` and explicitly passed to the bridge. For Ollama on the
@@ -72,7 +74,8 @@ Docker host, use `RAD_MODEL_BASE_URL=http://host.docker.internal:11434/v1` rathe
 | `RAD_MODELS` | unset | Comma-separated LangChain provider strings the session can **switch between in the app** (the model select in the sidebar header); the first is the default |
 | `RAD_MODEL` | `openai:gpt-5.6-terra` | A single provider string (`openai:…`, `anthropic:…`); used when `RAD_MODELS` is unset |
 | `RAD_MODEL_BASE_URL` | unset | If set, uses `ChatOpenAI(base_url=…)` — any OpenAI-compatible endpoint (Ollama: `http://localhost:11434/v1`). Global: every entry of `RAD_MODELS` then goes to that endpoint, so a list mixes hosted models *or* Ollama models, not both |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | — | Provider keys; falls back to `ollama` when a base URL is set |
+| `AI_GATEWAY_API_KEY` | unset | Preferred credential whenever `RAD_MODEL_BASE_URL` is set; Production Vercel uses a dedicated budgeted key |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | — | Local/direct-provider keys; `OPENAI_API_KEY` is the base-URL fallback, then `ollama` |
 | `RAD_LOG_LEVEL` | `INFO` | Python logging level (stderr) |
 
 Keys never live in the repo. Put them in a **`.env` at the repo root** (gitignored; `cp .env.example .env` and fill in what you use) — the agent reads it at start through `python-dotenv`, so `just dev` and `just smoke` need no shell setup. Plain environment variables work too and override the file:
@@ -85,6 +88,11 @@ RAD_MODEL=openai:gpt-oss:20b RAD_MODEL_BASE_URL=http://localhost:11434/v1 just d
 ```
 
 **Switching in the app** is plain ACP: the agent advertises a `model` select in `session/new`'s `configOptions` (always, even with one entry), the sidebar header renders it, and a change sends `session/set_config_option` — the agent rebuilds its graph for that session (its chat memory starts over; the transcript in the sidebar stays). The choice is per session: a worklist switch or a reload returns to the default. Audited as `session.config → model=<spec>`.
+
+On any unexpected WebSocket close, unfinished proposals are cancelled and the running turn ends as
+an error. The report, transcript, flags, and in-memory audit remain in the browser. Reconnection is
+never automatic: click **Reconnect agent** to create a fresh ACP/agent session with no restored agent
+memory. Hosted setup and rotation procedures are in [`docs/deploy/vercel.md`](../deploy/vercel.md).
 
 
 ## Gates
@@ -122,6 +130,7 @@ decisions, permission answers, writes with their outcome, draft clears, cancels)
 the ACP connection as a `_rad/audit` notification. The bridge intercepts those frames — the one
 thing it ever parses — and appends them to **`audit/{accession}.jsonl`** at the repo root
 (`AUDIT_DIR` overrides; gitignored). The sidebar's *Audit* tab shows the same records live.
+On Vercel the sink is instead an environment-scoped Redis list with a rolling seven-day TTL.
 
 ## Troubleshooting
 

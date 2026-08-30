@@ -49,3 +49,15 @@ def test_resolve_model_builds_chat_openai_against_a_base_url(
     model = resolve_model("openai:gpt-oss:20b")
     assert type(model).__name__ == "ChatOpenAI"
     assert model.model_name == "gpt-oss:20b"  # type: ignore[union-attr]
+
+
+def test_gateway_key_and_slash_model_take_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAD_MODEL_BASE_URL", "https://ai-gateway.vercel.sh/v1")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gateway-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "direct-secret")
+    model = resolve_model("openai/gpt-5.6-terra")
+    assert type(model).__name__ == "ChatOpenAI"
+    assert model.model_name == "openai/gpt-5.6-terra"  # type: ignore[union-attr]
+    assert model.openai_api_key.get_secret_value() == "gateway-secret"  # type: ignore[union-attr]

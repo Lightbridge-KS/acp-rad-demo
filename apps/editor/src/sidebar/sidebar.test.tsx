@@ -22,9 +22,10 @@ type HarnessProps = {
   flags?: Flag[];
   onAcknowledge?: (id: string) => void;
   onLocate?: (id: string) => void;
+  onReconnect?: () => void;
 };
 
-function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onLocate }: HarnessProps) {
+function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onLocate, onReconnect }: HarnessProps) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   dispatchRef = dispatch;
   return (
@@ -39,6 +40,7 @@ function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onL
       flags={flags}
       onAcknowledge={onAcknowledge}
       onLocate={onLocate}
+      onReconnect={onReconnect}
     />
   );
 }
@@ -146,6 +148,18 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("stopped").textContent).toBe("stopped");
     act(() => dispatchRef!({ type: "user", text: "again" }));
     expect(screen.queryByTestId("stopped")).toBeNull();
+  });
+
+  it("ends an unfinished turn on disconnect and offers only manual reconnect", () => {
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
+    const reconnect = vi.fn();
+    const { rerender } = render(<Harness agent={agent} />);
+    act(() => dispatchRef!({ type: "user", text: "draft" }));
+    act(() => dispatchRef!({ type: "disconnect" }));
+    expect((screen.getByText("Send") as HTMLButtonElement).disabled).toBe(true);
+    rerender(<Harness agent={agent} header={{ status: "disconnected", error: "connection closed" }} onReconnect={reconnect} />);
+    fireEvent.click(screen.getByTestId("reconnect-agent"));
+    expect(reconnect).toHaveBeenCalledOnce();
   });
 
   it("shows open flags as cards and owns the Acknowledge decision; a raise_flag tool card reads 'flag'", () => {

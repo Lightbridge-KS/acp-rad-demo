@@ -41,3 +41,7 @@ _temp/
 # Presentation render output
 presentation/_output/
 presentation/*.pdf
+
+# Vercel local link state
+.vercel
+.env*

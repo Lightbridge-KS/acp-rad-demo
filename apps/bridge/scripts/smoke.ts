@@ -26,8 +26,10 @@ import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
 import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
 import { FLAG_METHOD, RadError, canonicalize, createReportStore, markdownToDelta, sliceLines, zFlagParams, type Op } from "acp-rad";
+import { WebSocket } from "ws";
 
 const url = process.env.BRIDGE_URL ?? "ws://localhost:8787/acp?agent=rad";
+const smokeOrigin = process.env.BRIDGE_ORIGIN ?? new URL(url.replace(/^ws/, "http")).origin;
 const ACCESSION = "ACC0000001";
 const CHEST_ACCESSION = "ACC0000012";
 const STONE_ACCESSION = "ACC0000031";
@@ -85,7 +87,13 @@ const rethrow = (err: unknown): never => {
   throw err;
 };
 
-const stream = createWebSocketStream(url);
+const stream = createWebSocketStream(url, {
+  WebSocket,
+  headers: {
+    Origin: smokeOrigin,
+    ...(process.env.BRIDGE_COOKIE ? { Cookie: process.env.BRIDGE_COOKIE } : {}),
+  },
+});
 const conn = acp
   .client({ name: "acp-rad-smoke" })
   .onNotification(acp.methods.client.session.update, (ctx) => {

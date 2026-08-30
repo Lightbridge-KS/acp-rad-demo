@@ -1,0 +1,38 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "editor": {
+      "root": ".",
+      "framework": "vite",
+      "installCommand": "pnpm install --frozen-lockfile",
+      "buildCommand": "pnpm --filter editor build",
+      "outputDirectory": "apps/editor/dist"
+    },
+    "bridge": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile",
+      "functions": {
+        "Dockerfile": {
+          "maxDuration": "max",
+          "maxConcurrency": 10,
+          "regions": ["sin1"]
+        }
+      }
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/acp",
+      "destination": { "service": "bridge" }
+    },
+    {
+      "source": "/health",
+      "destination": { "service": "bridge" }
+    },
+    {
+      "source": "/(.*)",
+      "destination": { "service": "editor" }
+    }
+  ]
+}
