@@ -46,7 +46,7 @@ const update = (u: unknown) => act(() => dispatchRef!({ type: "update", update: 
 
 describe("Sidebar", () => {
   it("streams text, mirrors tool cards and an externally resolved permission", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
 
     act(() => dispatchRef!({ type: "user", text: "Draft the impression" }));
@@ -92,7 +92,7 @@ describe("Sidebar", () => {
   });
 
   it("composer sends through the AgentPort and Stop cancels", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
     const input = screen.getByPlaceholderText(/Ask the agent/);
     fireEvent.change(input, { target: { value: "hello" } });
@@ -107,7 +107,7 @@ describe("Sidebar", () => {
   });
 
   it("marks a cancelled turn as stopped until the next prompt", () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
     render(<Harness agent={agent} />);
     act(() => dispatchRef!({ type: "user", text: "/impression" }));
     update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Reading…" } });
@@ -118,7 +118,7 @@ describe("Sidebar", () => {
   });
 
   it("shows open flags as cards and owns the Acknowledge decision; a raise_flag tool card reads 'flag'", () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
     const onAcknowledge = vi.fn();
     const onLocate = vi.fn();
     const flags: Flag[] = [
@@ -143,7 +143,7 @@ describe("Sidebar", () => {
   });
 
   it("composer / lists skills only and runs the picked one — editor commands are not chat", async () => {
-    const agent: AgentPort = { prompt: vi.fn(async () => {}), cancel: vi.fn(async () => {}) };
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}) };
     const onCommand = vi.fn();
     const groups: CommandGroups = {
       suggested: [],

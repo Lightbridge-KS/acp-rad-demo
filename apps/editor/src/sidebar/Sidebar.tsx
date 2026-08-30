@@ -30,7 +30,8 @@ import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
 
 export type AgentPort = {
-  prompt: (text: string) => Promise<void>;
+  /** Sends one turn; resolves with its stop reason (`end_turn`, `cancelled`, …, or `error`) — the QA gate counts on it. */
+  prompt: (text: string) => Promise<string>;
   cancel: () => Promise<void>;
 };
 
