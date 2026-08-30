@@ -1,0 +1,23 @@
+{
+  "title": "EMERGENCY MDCT OF THE WHOLE ABDOMEN",
+  "session": {
+    "accession": "ACC0000031",
+    "modality": "CT",
+    "region": "abdomen",
+    "protocol": "contrast",
+    "setting": "ER",
+    "reportStatus": "draft",
+    "shortPrelim": false,
+    "phiBoundary": "research_synthetic"
+  },
+  "patient": {
+    "ageBand": "40-49",
+    "sex": "F"
+  },
+  "study": {
+    "template": "ct-wa-er",
+    "doseMgy": 14,
+    "doseMgycm": 690,
+    "date": "30/08/2026"
+  }
+}

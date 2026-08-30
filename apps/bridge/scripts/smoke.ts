@@ -12,17 +12,22 @@
  * Stage 2 (slice 4): a second session on the CT chest case with priors — the agent advertises
  * its skills (`available_commands_update`) and `/compare` lands both prior dates on the
  * COMPARISON line.
+ * Stage 3 (slice 5): the agent advertises `flags` (Level 2) and `/qa`; on the CT whole-abdomen
+ * case with a planted laterality discrepancy, `/qa` raises a `_rad/flag` of kind `discrepancy`
+ * and writes nothing; back on the brain session (impression drafted, no discussed-with line),
+ * `/qa` raises `critical_uncommunicated`. Flag checks use `some`, never exact counts.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
 import { createWebSocketStream } from "@agentclientprotocol/sdk/experimental/ws-client";
-import { RadError, canonicalize, createReportStore, markdownToDelta, sliceLines, type Op } from "acp-rad";
+import { FLAG_METHOD, RadError, canonicalize, createReportStore, markdownToDelta, sliceLines, zFlagParams, type Op } from "acp-rad";
 
 const url = process.env.BRIDGE_URL ?? "ws://localhost:8787/acp?agent=rad";
 const ACCESSION = "ACC0000001";
 const CHEST_ACCESSION = "ACC0000012";
+const STONE_ACCESSION = "ACC0000031";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FX = path.resolve(here, "../../editor/fixtures");
 const read = (rel: string) => readFileSync(path.join(FX, rel), "utf8");
@@ -62,12 +67,14 @@ function caseStore(caseId: string, accession: string, start: (md: string) => str
 // Start state like the editor's demo: impression blanked so there is something to draft.
 const brain = caseStore("ct-brain-er-stroke", ACCESSION, (md) => md.replace(/(\*\*IMPRESSION:\*\*\n)[\s\S]*$/, "$1- ...\n"));
 const chest = caseStore("ct-chest-er-nodule-prior", CHEST_ACCESSION);
+const stone = caseStore("ct-wa-er-stone", STONE_ACCESSION);
 let active = brain;
 const store = { read: (p: string) => active.store.read(p), assertWritable: (p: string) => active.store.assertWritable(p), reportMarkdown: () => active.store.reportMarkdown() };
 
 const counts = { fsRead: 0, fsWrite: 0, readToolCalls: 0, editToolCalls: 0, diffs: 0, permissions: 0 };
 const offered: string[][] = [];
 let advertised: string[] = [];
+let flags: { kind: string; summary: string }[] = [];
 let text = "";
 const say = (s: string) => process.stderr.write(`${s}\n`);
 const rethrow = (err: unknown): never => {
@@ -122,6 +129,12 @@ const conn = acp
       active.setOps(markdownToDelta(store.reportMarkdown().replace(current, canonicalize(ctx.params.content))));
     }
     return { _meta: { rad: { outcome: "applied" } } };
+  })
+  .onRequest(FLAG_METHOD, zFlagParams, (ctx) => {
+    // The Client acknowledges on receipt (slice 5); the smoke just records the flag.
+    flags.push({ kind: ctx.params.kind, summary: ctx.params.summary });
+    say(`[_rad/flag] ${ctx.params.kind}: ${ctx.params.summary} @ ${JSON.stringify(ctx.params.locations)}`);
+    return { outcome: "acknowledged" as const };
   })
   .onRequest(acp.methods.client.session.requestPermission, (ctx) => {
     counts.permissions += 1;
@@ -224,6 +237,41 @@ try {
   const comparison = store.read(`/worklist/${CHEST_ACCESSION}/sections/comparison.md`);
   say(`[comparison after] ${JSON.stringify(comparison)}`);
 
+  // Stage 3 — /qa: flags, never edits. First the planted discrepancy, then the brain session
+  // whose impression the smoke drafted without a discussed-with line.
+  active = stone;
+  const stoneManifest = stone.store.manifest();
+  const stoneSession = await conn.agent.request(acp.methods.agent.session.new, {
+    cwd: `/worklist/${STONE_ACCESSION}`,
+    mcpServers: [],
+    _meta: {
+      rad: {
+        accession: STONE_ACCESSION,
+        modality: "CT",
+        region: "abdomen",
+        protocol: "contrast",
+        setting: "ER",
+        reportStatus: "draft",
+        shortPrelim: false,
+        phiBoundary: "research_synthetic",
+        manifest: stoneManifest,
+      },
+    },
+  });
+  say(`[session 3] ${stoneSession.sessionId} manifest=${stoneManifest.length} files`);
+  await new Promise((r) => setTimeout(r, 200));
+  const qaAdvertised = advertised.includes("qa");
+  const writesBefore = counts.fsWrite;
+  const editsBefore = counts.editToolCalls;
+  flags = [];
+  const r5 = await prompt("prompt 5", "/qa", stoneSession.sessionId);
+  const stoneFlags = [...flags];
+  active = brain;
+  flags = [];
+  const r6 = await prompt("prompt 6", "/qa", session.sessionId);
+  const brainFlags = [...flags];
+  say(`[flags] stone=${JSON.stringify(stoneFlags.map((f) => f.kind))} brain=${JSON.stringify(brainFlags.map((f) => f.kind))}`);
+
   const checks = {
     radCapsAdvertised: radCaps !== undefined,
     pong,
@@ -239,6 +287,12 @@ try {
     skillsAdvertised: ["compare", "impression", "proofread"].every((n) => advertised.includes(n)),
     compareLanded: comparison.includes("12/06/2025") && comparison.includes("20/02/2026") && !comparison.includes("____"),
     compareEndTurn: r4.stopReason === "end_turn",
+    flagsCapAdvertised: (radCaps as { flags?: boolean } | undefined)?.flags === true,
+    qaAdvertised,
+    discrepancyFlagged: stoneFlags.some((f) => f.kind === "discrepancy"),
+    criticalUncommunicatedFlagged: brainFlags.some((f) => f.kind === "critical_uncommunicated"),
+    qaNoWrites: counts.fsWrite === writesBefore && counts.editToolCalls === editsBefore,
+    qaEndTurn: r5.stopReason === "end_turn" && r6.stopReason === "end_turn",
   };
   say(`[checks] ${JSON.stringify(checks)}`);
   const ok = Object.values(checks).every(Boolean);
