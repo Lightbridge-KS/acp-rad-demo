@@ -38,8 +38,11 @@ _temp/
 # Vendored agent skills (re-fetched from skills-lock.json; upstream carries no license)
 .agents/
 
-# Presentation render output
-presentation/_output/
+# Presentation render output — except the rendered deck, tracked so reviewers
+# can read it without a Quarto toolchain. Must exclude the directory's *contents*,
+# not the directory: git cannot re-include a file under an excluded parent.
+presentation/_output/*
+!presentation/_output/acp-rad-demo.pdf
 presentation/*.pdf
 
 # Vercel local link state
