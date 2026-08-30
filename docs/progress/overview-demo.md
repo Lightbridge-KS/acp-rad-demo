@@ -42,7 +42,7 @@ Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-
 
 ## Now / Next
 
-- **Now:** slice 6 landed — demo-ready. Next session (KS, 2026-08-30): **polish the demo app, write `README.md`, make the presentation, deploy for the demo.**
+- **Now:** demo-ready. Landed 2026-08-30: `README.md` + MIT license + hospital name scrubbed (`77a7129`); presentation deck `presentation/acp-rad-demo.qmd` (Quarto revealjs, 23 slides, HTML + PDF via `just slides`; 18 content slides in four acts — Why · The demo · Under the hood (4, fenced) · What next; speaker notes on every slide). Remaining from the session plan: **polish the demo app, deploy for the demo**, then push and flip the repo public (fixtures still need KS's clinical review).
 - **Next:** none scheduled. Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run are **deferred with no schedule** (KS, 2026-08-30).
 
 ## Deferred

@@ -36,3 +36,7 @@ _temp/
 
 # Vendored agent skills (re-fetched from skills-lock.json; upstream carries no license)
 .agents/
+
+# Presentation render output
+presentation/_output/
+presentation/*.pdf

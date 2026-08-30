@@ -1,0 +1,108 @@
+/*-- scss:defaults --*/
+
+// Palette — matches the editor: blue accent, green insert, red delete, amber unreviewed.
+$accent:      #2563eb;
+$ink:         #111827;
+$muted:       #6b7280;
+$rule:        #e5e7eb;
+$paper:       #ffffff;
+$insert:      #dcfce7;
+$delete:      #fee2e2;
+$amber:       #fef3c7;
+$amber-ink:   #92400e;
+
+$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+$font-family-monospace:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+$presentation-font-size-root: 30px;
+$presentation-heading-font-weight: 700;
+$presentation-heading-color: $ink;
+$presentation-h1-font-size: 2.1em;
+$presentation-h2-font-size: 1.45em;
+$presentation-h3-font-size: 1.1em;
+$presentation-line-height: 1.4;
+
+$body-bg: $paper;
+$body-color: $ink;
+$link-color: $accent;
+$code-color: $ink;
+$code-bg: #f3f4f6;
+
+/*-- scss:rules --*/
+
+.reveal .slide-logo { display: none; }
+
+.reveal h2 {
+  margin-bottom: 0.5em;
+  letter-spacing: -0.01em;
+  border-bottom: 2px solid $rule;
+  padding-bottom: 0.15em;
+}
+
+.reveal .slides section { text-align: left; }
+
+// Title slide
+.reveal .title-slide {
+  h1 { font-size: 2.4em; letter-spacing: -0.02em; margin-bottom: 0.2em; }
+  .subtitle { color: $muted; font-size: 1.1em; }
+  .quarto-title-authors { margin-top: 1.5em; color: $muted; font-size: 0.8em; }
+}
+
+// Act separators
+.reveal section.act {
+  h1 { font-size: 2.2em; color: $accent; margin-top: 0; }
+  p  { color: $muted; font-size: 1.1em; }
+}
+
+// One-line takeaway under a screenshot
+.reveal .takeaway {
+  font-size: 0.85em;
+  color: $ink;
+  border-left: 4px solid $accent;
+  padding-left: 0.6em;
+  margin-top: 0.4em;
+}
+
+// Fenced technical section
+.reveal section.tech .slide-tag,
+.reveal .slide-tag {
+  position: absolute; top: 0.4em; right: 0;
+  font-size: 0.5em; color: $muted; letter-spacing: 0.08em; text-transform: uppercase;
+}
+
+// Marks that mirror the editor overlay
+.ins { background: $insert; text-decoration: underline; text-decoration-color: #16a34a; padding: 0 0.15em; }
+.del { background: $delete; text-decoration: line-through; padding: 0 0.15em; }
+.unrev { background: $amber; color: $amber-ink; padding: 0 0.15em; }
+
+.reveal .muted { color: $muted; }
+.reveal .small { font-size: 0.75em; }
+.reveal .big   { font-size: 1.3em; }
+
+// Callout-like box
+.reveal .box {
+  border: 1px solid $rule; border-radius: 10px; padding: 0.6em 0.9em; background: #f9fafb;
+}
+.reveal .box.warn { border-color: #f59e0b; background: #fffbeb; }
+
+.reveal table { font-size: 0.72em; }
+.reveal table th { color: $muted; font-weight: 600; text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.05em; }
+.reveal table td, .reveal table th { padding: 0.35em 0.7em; border-bottom: 1px solid $rule; }
+
+.reveal pre { font-size: 0.6em; line-height: 1.35; }
+.reveal pre.mermaid-pre { background: transparent; box-shadow: none; }
+// JS-rendered mermaid: labels must keep mermaid's own 16px (boxes were measured at that size);
+// the whole SVG (it carries a viewBox) is then scaled like an image, capped in height.
+.reveal pre.mermaid, .reveal .mermaid-js, .reveal svg[id^="mermaid"] { font-size: 16px !important; }
+.reveal svg[id^="mermaid"] { width: 100% !important; max-width: 100% !important; height: auto !important; max-height: 430px; display: block; margin: 0 auto; }
+.reveal section.seq svg[id^="mermaid"] { max-height: 420px; }
+.reveal pre.mermaid { margin: 0; }
+
+.reveal .footer { color: $muted; font-size: 0.5em; }
+.reveal .slide-number { color: $muted; font-size: 0.5em; }
+
+// Screenshot framing
+.reveal img.shot { border: 1px solid $rule; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+.reveal img.audit { max-height: 480px; width: auto; }
+
+.reveal .columns { gap: 1.5em; }

@@ -46,3 +46,17 @@ smoke:
     trap 'kill $BR 2>/dev/null || true' EXIT
     for i in {1..50}; do curl -sf localhost:8787/health >/dev/null && break; sleep 0.2; done
     (cd apps/bridge && node scripts/smoke.ts)
+
+# Slides: Quarto revealjs → HTML, then PDF through Reveal's own print route (Chrome headless, ?print-pdf)
+slides:
+    #!/usr/bin/env zsh
+    set -euo pipefail
+    quarto render presentation
+    CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    (cd presentation/_output && python3 -m http.server 8123 >/dev/null 2>&1 &)
+    trap 'pkill -f "http.server 8123" 2>/dev/null || true' EXIT
+    for i in {1..25}; do curl -sf localhost:8123/acp-rad-demo.html >/dev/null && break; sleep 0.2; done
+    "$CHROME" --headless=new --disable-gpu --window-size=1400,900 --no-pdf-header-footer \
+      --virtual-time-budget=20000 --print-to-pdf=presentation/_output/acp-rad-demo.pdf \
+      'http://localhost:8123/acp-rad-demo.html?print-pdf' 2>/dev/null
+    echo "→ presentation/_output/acp-rad-demo.{html,pdf}"

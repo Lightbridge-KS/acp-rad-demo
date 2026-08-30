@@ -1,0 +1,26 @@
+project:
+  type: default
+  output-dir: _output
+  render:
+    - acp-rad-demo.qmd
+
+format:
+  revealjs:
+    theme: [default, theme.scss]
+    width: 1280
+    height: 720
+    margin: 0.06
+    slide-number: c/t
+    menu: false
+    controls: false
+    progress: true
+    hash: true
+    center: false
+    transition: none
+    background-transition: none
+    code-line-numbers: false
+    highlight-style: github
+    mermaid:
+      theme: neutral
+    footer: "ACP-Rad Demo · technology demonstration — not for clinical use"
+    embed-resources: false

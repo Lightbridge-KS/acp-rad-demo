@@ -62,6 +62,16 @@ just smoke            # live: starts the bridge, runs a headless ACP client end-
 `just smoke` starts its own bridge on 8787 — stop `just dev` first, or run `cd apps/bridge && node scripts/smoke.ts` against the running bridge (which already carries the key). Stage 2 of the smoke opens a second session on `ct-chest-er-nodule-prior` and checks the skills advertisement and `/compare`.
 ```
 
+## Slides
+
+```sh
+just slides           # presentation/_output/acp-rad-demo.{html,pdf}
+```
+
+Quarto revealjs (`presentation/`). The PDF goes through Reveal's own print route — Chrome headless on
+`?print-pdf` with `--window-size` set (the default 800×600 window shrinks every slide). `decktape` is
+not used: its bundled Chrome for Testing fails to launch here, and its capture clips mermaid labels.
+
 ## Tracing the wire
 
 `BRIDGE_TRACE=1 just dev` logs one line per JSON-RPC frame in each direction (method and id only,
