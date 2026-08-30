@@ -42,8 +42,8 @@ Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-
 
 ## Now / Next
 
-- **Now:** slice 6 landed — demo-ready. Next decision: slice 7 (stretch, Level 0 in the demo) or the deferred Zed-against-`rad-agent` run (the M = 2 half of the M×N argument, protocol doc §9).
-- **Next:** slice 7 (stretch) — Level 0 in the demo; KS's clinical review of the synthetic cases before showing colleagues.
+- **Now:** slice 6 landed — demo-ready. Next session (KS, 2026-08-30): **polish the demo app, write `README.md`, make the presentation, deploy for the demo.**
+- **Next:** none scheduled. Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run are **deferred with no schedule** (KS, 2026-08-30).
 
 ## Deferred
 
@@ -61,7 +61,7 @@ Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-
 - Word-level hunks (ADR 0002 alternative) if whole-line strike/insert proves noisy for one-word edits.
 - KS reviews the four synthetic cases (`ct-brain-er-blank`, `cxr-pa-prior`, `ct-chest-er-nodule-prior`, and slice 5's `ct-wa-er-stone` with its planted right/left discrepancy) for clinical plausibility — committed unreviewed.
 - ~~Editor-side "never edits during `/qa`" enforcement~~ — landed in slice 6 (`refuseReason()`; any `/qa` turn, hand-typed or gate-sent).
-- Zed (a foreign ACP client) against `rad-agent` unchanged — the M = 2 half of the M×N argument (protocol doc §9); deferred by KS, not before slice 6.
+- Zed (a foreign ACP client) against `rad-agent` unchanged — the M = 2 half of the M×N argument (protocol doc §9); **deferred, no schedule** (KS, 2026-08-30), together with slice 7.
 - At browser zoom ≠ 100 % the whole page scrolls when a command moves the caret (Quill's `scrollSelectionIntoView` reaches `html`); the editor pane should own the scroll.
 - The composer's assistant-ui trigger popover is an `Unstable_*` API pinned at 0.15.17; an upgrade must re-check `Sidebar.tsx`'s `Composer`.
 - Dev-only nit: React StrictMode's double effect opens two ACP sessions per load, so `audit/*.jsonl` gets two `session.new` records in dev; production builds spawn once.
