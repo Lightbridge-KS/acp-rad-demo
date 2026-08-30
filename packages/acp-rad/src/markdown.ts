@@ -1,5 +1,5 @@
 /**
- * Canonical Markdown ⇄ Quill Delta for the Ramathibodi report grammar (design §5.5).
+ * Canonical Markdown ⇄ Quill Delta for the house report grammar (design §5.5).
  *
  * One Quill line ⇄ one Markdown line. Blocks: paragraph · `- ` bullet · `1. ` ordered ·
  * empty line. Inline: `**bold**`, `_italic_`. Everything else is dropped.

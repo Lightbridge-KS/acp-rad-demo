@@ -158,7 +158,7 @@ Trust boundary: everything that enforces INV-1 (sign-off), RO paths, `final` loc
 | `audit/` | Editor stamps every `AuditRecord` (it is the trust boundary), keeps an in-memory mirror for the panel, and sends `_rad/audit` notifications to the bridge, which appends `audit/{accession}.jsonl` on disk. **Decided.** |
 | `agent/` | `client()` wiring: handlers for `session/update`, `request_permission`, `fs/*`, `_rad/critical_finding`; `session/new` with `_meta.rad` (+ `manifest`: every readable virtual path, since ACP v1 has no `ls`); cancel. |
 | `sidebar/` | On `@assistant-ui/react` (external-store runtime + unstyled primitives; ADR 0001): transcript (message + collapsed thought chunks), tool-call cards (kind, status, diff path, **mirrored** decision), plan panel, QA alert card (the one decision the sidebar owns), `/` menu in the composer, audit panel. The permission decision itself lives in the report (§5.7). |
-| `fixtures/` | Derived from the real Ramathibodi templates in `_temp/` (structure only, synthetic content): 5 templates → `/templates/{ct-brain-er,ct-chest-er,ct-wa-er,cxr-pa,us-wa}.md`; snippets → `/snippets/{er-reviewed,er-not-reviewed,discuss-with-dr,sp-brain,sp-body,sp-chest}.md` (RO, new namespace entry); 3 filled synthetic cases (CT brain ER stroke · CXR PA with prior · CT chest ER nodule with prior) + 1 blank study for scenario 0; `meta.json` per case (age band, sex, modality, protocol, dose, setting). |
+| `fixtures/` | Derived from the real house templates in `_temp/` (structure only, synthetic content): 5 templates → `/templates/{ct-brain-er,ct-chest-er,ct-wa-er,cxr-pa,us-wa}.md`; snippets → `/snippets/{er-reviewed,er-not-reviewed,discuss-with-dr,sp-brain,sp-body,sp-chest}.md` (RO, new namespace entry); 3 filled synthetic cases (CT brain ER stroke · CXR PA with prior · CT chest ER nodule with prior) + 1 blank study for scenario 0; `meta.json` per case (age band, sex, modality, protocol, dose, setting). |
 
 **Permission handling** — the Client is the permission authority for *all* levels:
 
@@ -256,7 +256,7 @@ Proposal §8.1 pushes `_rad/focus_state` as a debounced notification. The PoC ag
 ### 5.4 Constraint: v2-readiness via the `ReportStore` seam
 All report access goes through `ReportStore`. On v1 it is exposed as `fs/*`; on v2 the same object becomes an MCP-over-ACP server (`read_section`, `propose_edit`) — the sidebar and Quill code never know. Not built now; enforced as a module boundary.
 
-### 5.5 Canonical grammar: Rama label-lines, not H2 headings — Decided
+### 5.5 Canonical grammar: house label-lines, not H2 headings — Decided
 The real templates (`_temp/reports/`) use `**LABEL:** text` lines, a blank line before `**FINDINGS:**`/`**IMPRESSION:**`, organ sub-fields as `**Organ:** text` lines inside FINDINGS, and `- ` bullets for impression items — no headings at all. Proposal §4.2's `## SECTION` scheme would make the demo look foreign. Proposed canonical Markdown v0.1 = **exactly this grammar**: one Quill line ⇄ one MD line; bold runs preserved; `- ` ordered/unordered bullets; blank line only before top-level section labels; `___` blanks are plain text. Section ids are inferred from the uppercase labels (`HISTORY`, `TECHNIQUE(S)`, `COMPARISON`, `FINDINGS`, `IMPRESSION`); the header block (contrast, complication, dose, phases) belongs to `technique`. Organ fields stay lines inside `findings.md` — `edit_file` with `old_string` = the organ line is already field-precise, so no per-organ paths (settles proposal open question 3). **Decided.** Section partition: `history` | `technique` (absorbs phases, contrast, complication, dose lines) | `comparison` | `findings` | `impression` (absorbs status snippets and the "discussed with Dr." footer). The title line is the text before the first section label (RO). Parse rules (slice 2): `**` opens bold only before a non-space and closes only after one (so the real snippet `** This is a PRELIMINARY…` stays literal); `_` is a marker only at a word boundary and never adjacent to another `_` (`___` blanks, `E_V_M_` stay literal); an unclosed opener unwinds to literal text. Fixtures are stored canonical (labels bolded, no trailing whitespace); the converter does not auto-bold unbolded labels.
 
 ### 5.6 Report lifecycle from the snippets
@@ -326,7 +326,7 @@ acp-rad-poc/                      pnpm workspace + uv project; justfile at root
 
 ## 8. Scope
 
-**In (v0.1 PoC):** scenarios 0–5 (incl. 3b); Finalize lock demo; fixtures drafted by the agent, reviewed by KS before the demo (**Decided**); English reports in Rama grammar (§5.5); Level 1 editor + agent with the L2 `critical_finding` method; 3 synthetic cases; Ollama/OpenAI/Anthropic switch; client-side audit panel + JSON export; cancel; `session/load` off.
+**In (v0.1 PoC):** scenarios 0–5 (incl. 3b); Finalize lock demo; fixtures drafted by the agent, reviewed by KS before the demo (**Decided**); English reports in house grammar (§5.5); Level 1 editor + agent with the L2 `critical_finding` method; 3 synthetic cases; Ollama/OpenAI/Anthropic switch; client-side audit panel + JSON export; cancel; `session/load` off.
 
 **Stretch:** scenario 6 (Level 0) — target **`claude-agent-acp` first**, Gemini second. Requires a *materialized* on-disk mirror of the namespace (`materialize` script in `apps/bridge`), because registry agents read/write/glob the real disk and validate `cwd`; the bridge watches the mirror and pushes changes to the editor (`_bridge/file_changed` notification), which re-reads and re-marks `ai-draft`. The editor's permission card stays the gate; `allow_always` options are filtered out for writes (INV-1). Decided (KS, 2026-08-29): stretch, spike first.
 
@@ -365,7 +365,7 @@ None blocking. Carried to `docs/progress/` at slice 1: whether `technique` shoul
 | 2 | `packages/acp-rad` from day 1 | §3.4 |
 | 3 | Hosted demo model; Ollama shown as on-prem switch | §6 |
 | 4 | Level 0 = stretch, spike first, `claude-agent-acp` before Gemini | §8, §9 |
-| 5 | Canonical MD = Rama label-line grammar; 5 sections + RO title | §5.5 |
+| 5 | Canonical MD = house label-line grammar; 5 sections + RO title | §5.5 |
 | 6 | `section_patch` folded; codes via `_meta.rad.codes` | §5.2 |
 | 7 | Focus in `session/prompt._meta.rad.focus`; stream optional | §5.3 |
 | 8 | Agent = Python `deepagents-acp` subclass (polyglot repo) | §3.3 |

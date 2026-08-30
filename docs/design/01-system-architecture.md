@@ -10,7 +10,7 @@ read_when: Onboarding to the stack; touching a module boundary (editor ⇄ bridg
 
 ## 1. Overview
 
-A radiology report editor in the browser (QuillJS) hosting an AI agent through the **Agent Client Protocol (ACP v1)**, extended by the **ACP-Rad profile** (`_meta.rad` + `_rad/*` only). The radiologist prompts; the agent proposes; every write passes the human gate inside the report. Demo target: radiology colleagues at Ramathibodi; the profile later consolidates into a separate standard, which this demo *exercises* but does not define.
+A radiology report editor in the browser (QuillJS) hosting an AI agent through the **Agent Client Protocol (ACP v1)**, extended by the **ACP-Rad profile** (`_meta.rad` + `_rad/*` only). The radiologist prompts; the agent proposes; every write passes the human gate inside the report. Demo target: radiology colleagues; the profile later consolidates into a separate standard, which this demo *exercises* but does not define.
 
 **Type: Application** — three entry points run: `apps/editor/src/main.tsx` (Vite SPA), `apps/bridge/src/index.ts` (Node WebSocket server), `agents/rad-agent/src/rad_agent/main.py` (stdio ACP agent). `packages/acp-rad` is a library, but only the editor consumes it.
 
@@ -240,7 +240,7 @@ The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `L
 | Proposal item | PoC decision |
 |---|---|
 | Virtual namespace (§4) | `/worklist/{acc}/{report.md, sections/{id}.md, meta.json}` RW*, `/priors/**`, `/templates/**`, `/snippets/**` RO. RW* = only via the proposal flow. `session/new._meta.rad.manifest` lists every readable path (v1 has no `ls`). Absent section ⇒ absent file ⇒ `-32004`. |
-| Canonical Markdown (§4.2) | **Rama label-line grammar**, not H2 headings: `**LABEL:** text` lines, `**Organ:** text` inside FINDINGS, `- ` impression items, blank line only before top-level labels, no headings. Sections `history · technique · comparison · findings · impression`; the title line precedes the first label (RO). Literal `*`/`_` are not escaped (`___` blanks, `E_V_M_` stay literal). |
+| Canonical Markdown (§4.2) | **house label-line grammar**, not H2 headings: `**LABEL:** text` lines, `**Organ:** text` inside FINDINGS, `- ` impression items, blank line only before top-level labels, no headings. Sections `history · technique · comparison · findings · impression`; the title line precedes the first label (RO). Literal `*`/`_` are not escaped (`___` blanks, `E_V_M_` stay literal). |
 | Session binding (§5) | `_meta.rad` on `session/new`: `accession, modality, region, protocol, setting, reportStatus, phiBoundary, manifest`. **`reportStatus ∈ {draft, preliminary, final}` + `shortPrelim: boolean`** (2026-08-30; replaces the 4-state enum). |
 | Levels (§3) | inferred from `initialize.result._meta.rad`; absent ⇒ Level 0. Client supports all three at once. |
 | Clinical verbs (§7.2) | `accept · accept_edit · reject` on the wire; no `allow_always` on writes, ever. UI words: *Accept · Accept for review · Reject*, on a *change* (the UI word for a hunk). |

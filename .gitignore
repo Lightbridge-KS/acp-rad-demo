@@ -33,3 +33,6 @@ _temp/
 
 # Claude Code harness artifact
 .claude/.cc-writes
+
+# Vendored agent skills (re-fetched from skills-lock.json; upstream carries no license)
+.agents/

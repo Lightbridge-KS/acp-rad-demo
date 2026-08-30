@@ -1,6 +1,6 @@
 # acp-rad-demo
 
-Demo: a radiology report editor (QuillJS, browser) hosting an AI agent through the **Agent Client Protocol (ACP)**, extended by the **ACP-Rad** profile. The radiologist prompts; the agent proposes; every write is approved in the editor. Demo target: radiology colleagues at Ramathibodi. Later: the profile consolidates into a separate standard.
+Demo: a radiology report editor (QuillJS, browser) hosting an AI agent through the **Agent Client Protocol (ACP)**, extended by the **ACP-Rad** profile. The radiologist prompts; the agent proposes; every write is approved in the editor. Demo target: radiology colleagues. Later: the profile consolidates into a separate standard.
 
 ## Read first
 
@@ -33,7 +33,7 @@ _playground/     gitignored spikes (session dirs with NOTES.md); _temp/ is gitig
 ## Conventions
 
 - Protocol: ACP **v1** (`protocolVersion: 1`). Profile extensions ride only in `_meta.rad` and `_rad/*` methods — never new root fields.
-- Report grammar: Ramathibodi label-lines (`**HISTORY:** …`, `**Organ:** …`, `- ` bullets), no headings. Sections: history · technique · comparison · findings · impression.
+- Report grammar: house label-lines (`**HISTORY:** …`, `**Organ:** …`, `- ` bullets), no headings. Sections: history · technique · comparison · findings · impression.
 - The agent is untrusted. Anything that enforces an invariant lives in `apps/editor`.
 - No PHI, ever. Fixtures are synthetic (`phiBoundary: research_synthetic`).
 - TS: strict, explicit types at boundaries, `import type`. Python: ruff + mypy, NumPy docstrings for public API.
