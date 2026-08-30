@@ -253,7 +253,9 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setHeader({ status: "error", error: err instanceof Error ? err.message : String(err) });
+        // A refused WebSocket rejects with the DOM `error` Event, which stringifies to "[object Event]".
+        const error = err instanceof Error ? err.message : typeof Event !== "undefined" && err instanceof Event ? `cannot reach the bridge at ${BRIDGE_URL}` : String(err);
+        setHeader({ status: "error", error });
       });
     return () => {
       cancelled = true;
