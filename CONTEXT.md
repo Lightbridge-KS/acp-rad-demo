@@ -52,10 +52,14 @@ The report as it currently stands in the editor — the only text that exists; p
 One of the five parts of a report: history, technique, comparison, findings, impression. The unit an agent reads and proposes against.
 
 **Label line**:
-A line that opens with a bold label — a section label (`**FINDINGS:**`) or an organ line (`**Ventricles:** …`). The house grammar has no headings.
+A line that opens with a bold label — a section label (`**FINDINGS:**`) or an organ line (`**Ventricles:** …`). The house grammar has no headings. The editor *writes* one form and *reads* many: a section label is recognized however it was pasted (`**FINDINGS**:`, `FINDINGS:`, bare `IMPRESSION`), provided it opens the line and ends in a colon or the line's end.
 
 **Canonical Markdown**:
 The one serialization of a report both peers read: label lines, `- ` impression items, no headings, no escaping.
+
+**Section profile**:
+The vocabulary that decides which keywords open which section, plus the footer lines that close the last one. Data, not code — the default is the house profile; another institution supplies its own.
+_Avoid_: parser config, schema
 
 **Prior**:
 An earlier study's report available for comparison. Read-only.

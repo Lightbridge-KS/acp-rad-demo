@@ -166,6 +166,7 @@ in `apps/editor`; no PHI — fixtures carry `phiBoundary: research_synthetic`.
 | [`docs/design/03-agentic-architecture.md`](docs/design/03-agentic-architecture.md) | The agent: loop, tools over `fs/*`, the gate split across the boundary |
 | [`docs/design/04-skills.md`](docs/design/04-skills.md) | `/impression` · `/compare` · `/proofread` · `/qa` as prompt expansions |
 | [`docs/design/05-data-architecture.md`](docs/design/05-data-architecture.md) | The report as system of record, the namespace, proposals and grants, audit lineage |
+| [`docs/design/06-report-parsing.md`](docs/design/06-report-parsing.md) | Text → sections: the tolerant reader, the section profile, absent sections |
 | [`docs/protocol/01-acp-shape.md`](docs/protocol/01-acp-shape.md) | ACP as spoken here, every message shape, and the M×N → M+N analysis (§9) |
 | [`docs/adr/`](docs/adr/) | Decisions: sidebar on assistant-ui, line-level hunks |
 | [`docs/progress/overview-demo.md`](docs/progress/overview-demo.md) | Where the work stands |

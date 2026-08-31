@@ -5,7 +5,7 @@ read_when: Starting any session on this repo; before planning a slice; when land
 
 # ACP-Rad Demo — progress
 
-Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · [`04-skills`](../design/04-skills.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
+Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · [`04-skills`](../design/04-skills.md) · [`05-data-architecture`](../design/05-data-architecture.md) · [`06-report-parsing`](../design/06-report-parsing.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Sub-trackers: [`report-parsing`](./report-parsing.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
 
 ## Milestones
 
@@ -47,11 +47,12 @@ Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-
   - [x] Hosted rollout: superseded authentication variables removed; Preview and Production deployed. Production live smoke green against `wss://acp-rad-demo-editor.vercel.app/acp` (`BRIDGE_URL`/`BRIDGE_ORIGIN` retarget `scripts/smoke.ts`) — all 22 checks, `SMOKE OK`, exit 0: rad caps, gated `/impression`, `/compare` across both priors, `/qa` raising `discrepancy` and `critical_uncommunicated` with no writes, and the model select.
   - [x] First production model call failed `403 RestrictedModelsError` — the team was on the AI Gateway **free tier**, which serves only a subset of the catalogue; the $10/day key caps spend but grants no credits. KS purchased credits; no code or configuration change was needed. `GET /v1/models` lists the full catalogue regardless of entitlement, so it cannot verify access — the runbook now verifies by calling the model.
 - [ ] **7. (stretch) Level 0 in the demo** (~1 day) — target **`claude-agent-acp` first, `gemini --experimental-acp` second** (design §2/§8). Bridge: materialize the namespace to an on-disk mirror + file-watch (`_bridge/file_changed`); write `<mirror>/.claude/settings.json` denying Bash/Write/WebFetch so edits go through `Edit`. Editor: already pins `session/set_mode: default` and filters `allow_always` (slice 3); still needs to ignore L0 `available_commands_update` and apply grant matching to the file-watch event instead of `fs/write_text_file`.
+- [ ] **Report parsing (tolerant section labels)** (in progress) — a pasted report that is not in house grammar parsed to *zero* sections, so `/impression` could not read or write `sections/*.md` while `ls` still listed them. Port of the keyword model from KS's Python `radreportparser`, line-anchored. Design [`06-report-parsing`](../design/06-report-parsing.md) · detail [`report-parsing.md`](./report-parsing.md).
 
 ## Now / Next
 
 - **Now:** the anonymous public demo is live at `https://acp-rad-demo-editor.vercel.app` and verified by the production smoke. Outstanding before wider sharing: KS reviews the four synthetic cases for clinical plausibility.
-- **Next:** none scheduled. Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run remain **deferred with no schedule** (KS, 2026-08-30).
+- **Next:** report parsing — tolerant section labels, then absent sections and `/normalize` ([`report-parsing.md`](./report-parsing.md)). Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run remain **deferred with no schedule** (KS, 2026-08-30).
 
 ## Deferred
 
