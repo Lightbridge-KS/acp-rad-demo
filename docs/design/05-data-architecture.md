@@ -29,7 +29,7 @@ Tech: zod 4 schemas (`packages/acp-rad/src/schema.ts`), `quill-delta` ops, canon
 flowchart LR
     subgraph disk["Repo / disk"]
         fx[("apps/editor/fixtures/<br/>cases · priors · templates · snippets")]
-        prompts[("agents/rad-agent/prompts/<br/>system.md · skills/*.md")]
+        prompts[("agents/rad-agent/prompts/<br/>system.md · skills/&lt;name&gt;/SKILL.md")]
         auditf[("audit/{accession}.jsonl<br/>append-only")]
     end
     subgraph browser["apps/editor — browser memory, one page load"]
@@ -75,7 +75,7 @@ flowchart LR
 | Redis `acp-rad:{environment}:audit:{accession}` | managed list | one serialized `AuditRecord` per entry | Vercel bridge | operators through Upstash; nothing in-app | rolling 7-day TTL |
 | Redis lease key | managed sorted set | anonymous open WebSocket leases | Vercel bridge Lua/commands | bridge admission and heartbeat | 90 s, renewed every 30 s |
 | `apps/editor/fixtures/**` | files in the repo | cases (`meta.json`, `report.md`, `priors/*.md`, `priors/index.md`), `templates/*.md`, `snippets/*.md` | humans | Vite build, `smoke.ts` | repo |
-| `prompts/system.md`, `prompts/skills/*.md` | files in the repo | system prompt, skill expansions | humans | `agent.py`, `skills.py` at process start | repo |
+| `prompts/system.md`, `prompts/skills/<name>/SKILL.md` | files in the repo | system prompt; the **builtin** skill layer | humans | `agent.py` at import, `skills.py` per session | repo |
 | `RadReportAgentServer.session_rad` | process memory, agent | `session_id → _meta.rad` of `session/new` (accession, manifest, reportStatus snapshot, …) | `new_session` | `_build_agent` | agent process = one WS connection |
 | `MemorySaver` (LangGraph) | process memory, agent | one thread per session: the full message history, including every file content returned by `fs/read_text_file` | LangGraph | model context assembly | agent process |
 | Environment (`RAD_MODEL`, `RAD_MODEL_BASE_URL`, provider/Gateway keys, Redis credentials, `.env`) | config | model and public-demo controls | Vercel encrypted environment or local `.env` (gitignored) | bridge startup, `config.py` | process/deployment |
@@ -163,6 +163,8 @@ The findings about ___ … discussed with Dr.____ …       ← discussed-with l
 | `/priors/{acc}/report.md` | RO | `fixture.priors[acc]` | prior report, canonical |
 | `/templates/{id}.md` | RO | build-time `templates` collection | house template |
 | `/snippets/{id}.md` | RO | build-time `snippets` collection | snippet text |
+| `/skills/{house\|personal}/{name}/SKILL.md` | RO | build-time `skillFiles(persona)` | a skill layer — **instructions, not data** (INV-3) |
+| `/skills/{layer}/{name}/references/**` | RO | same | reference material a skill loads on demand |
 
 RW\* = writable only through the proposal flow (§4). `{acc}` must equal the session's accession, otherwise `-32004`. The **manifest** (`buildManifest`) is the sorted, de-duplicated list of every readable path, sent once at `session/new`; the agent answers `ls`/`glob` from it because ACP v1 has no directory listing. It is built only from fixture-constant inputs — the five sections are always listed, present or not — so a listing sent at connect stays true for the session (design 06 §6). Worked example from the audit trail: `ACC0000012` opens with `manifest=21` = `report.md` + `meta.json` + 5 sections + `priors/index.md` + 2 priors + 5 templates + 6 snippets.
 
@@ -177,7 +179,10 @@ apps/editor/fixtures/
 │       ├── index.md            "- <acc> · <exam> · <dd/mm/yyyy> · /priors/<acc>/report.md", newest first
 │       └── <accession>.md      one prior report, canonical
 ├── templates/<id>.md           ct-brain-er · ct-chest-er · ct-wa-er · cxr-pa · us-wa
-└── snippets/<id>.md            er-reviewed · er-not-reviewed · discuss-with-dr · sp-brain · sp-chest · sp-body
+├── snippets/<id>.md            er-reviewed · er-not-reviewed · discuss-with-dr · sp-brain · sp-chest · sp-body
+└── skills/
+    ├── house/<name>/SKILL.md   qa (extends the sealed base) · stroke-protocol (+ references/aspects.md)
+    └── personal/<persona>/<name>/SKILL.md   dr-a: impression (overrides) · dr-b: qa (extends)
 ```
 
 Case ids are directory names; accessions live inside `meta.json` (`ACC0000001`, `ACC0000002`, `ACC0000012`, `ACC0000021`; priors `ACC0000010`, `ACC0000011`, `ACC0000020`). `demo.start: impression_empty` makes `applyStartState` blank the IMPRESSION items at load — the file stays complete; `demo.default` marks the case opened without `?case=`. Templates carry `___` blanks and sex-conditional `[Male]`/`[female]` lines that `instantiateTemplate` resolves from `meta.patient.sex` and fills dose blanks from `meta.study`.
@@ -256,7 +261,7 @@ Where the bytes end up: the bullet exists in the Quill Delta because the radiolo
 
 `audit.record(event, fields)` → stamped with the bound context (`sessionId`, `accession`, actor from the header's role toggle — `{userId: "demo-<role>", role: resident | attending}` —, `agent{name, version, level}`) → pushed to `records` (the sidebar's *Audit* tab) → `conn.agent.notify("_rad/audit", record)` → WebSocket frame → `createAuditWriter.persist` → `RPUSH` plus a refreshed 7-day `EXPIRE` in Vercel, or async append to `audit/{accession}.jsonl` locally; **the frame is dropped** and never reaches the agent. Records made before `bind` are queued and flushed with their original `ts`. Persistence remains best-effort: a sink failure is logged and the in-memory record remains the page's truth.
 
-Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session.new` · `session.set_mode` · `session.cancel` · `fs.read` (outcome `base-while-granted` when a grant is open) · `fs.write.applied` · `fs.write.partial` · `fs.write.refused` · `fs.write.rejected` · `fs.write.unsolicited` · `proposal.received` · `permission.request` · `permission.accept` · `permission.accept_edit` · `permission.reject` · `permission.cancelled` · `permission.unmatched` · `hunk.accept` · `hunk.accept_edit` · `hunk.reject` · `review.cleared` · `command.<id>` (outcome `skill` · `instant` · `already present` · `proposal · n hunks`) · `short_prelim.folded`. Slice 5: `flag.raised` (`flagId`, `path`, outcome = kind, or `kind · line not found`) · `flag.acknowledged` (`flagId`). Slice 6: `qa.refused` (outcome = the blockers, e.g. `2 pending changes · 3 blanks left`) · `qa.passed` · `qa.overridden` (`flagIds`) · `qa.skipped` (outcome `short_prelim | agent_absent | level | timeout | cancelled | error`) · `status.changed` (outcome = the new status) · `command.qa` (outcome `gate`) · `permission.refused` and `fs.write.refused` (outcome `final | qa`) · `session.config` (outcome `model=<spec>`). With no session (bridge down) records stay queued in `AuditLog.pending` — the panel shows none and nothing is persisted.
+Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session.new` · `session.set_mode` · `session.cancel` · `fs.read` (outcome `base-while-granted` when a grant is open) · `fs.write.applied` · `fs.write.partial` · `fs.write.refused` · `fs.write.rejected` · `fs.write.unsolicited` · `proposal.received` · `permission.request` · `permission.accept` · `permission.accept_edit` · `permission.reject` · `permission.cancelled` · `permission.unmatched` · `hunk.accept` · `hunk.accept_edit` · `hunk.reject` · `review.cleared` · `command.<id>` (outcome `skill` · `instant` · `already present` · `proposal · n hunks`) · `short_prelim.folded`. Slice 5: `flag.raised` (`flagId`, `path`, outcome = kind, or `kind · line not found`) · `flag.acknowledged` (`flagId`). Slice 6: `qa.refused` (outcome = the blockers, e.g. `2 pending changes · 3 blanks left`) · `qa.passed` · `qa.overridden` (`flagIds`) · `qa.skipped` (outcome `short_prelim | agent_absent | level | timeout | cancelled | error`) · `status.changed` (outcome = the new status) · `command.qa` (outcome `gate`) · `permission.refused` and `fs.write.refused` (outcome `final | qa`) · `session.config` (outcome `model=<spec>`). ADR 0004: `skill.mentioned` (`skill`, `skillLayers`, `argsHash` over the client-served layer text). **Every record also carries `model`** — the spec in force when it was made, kept current through `session/set_config_option`, because `AuditContext` is bound once at connect and would otherwise name the model the session *started* with. Context provenance is what the Client can attest: it chose the model and it serves the house and personal layers; `agent.version` pins the builtin layer, and nothing the agent reports about itself is taken on trust. With no session (bridge down) records stay queued in `AuditLog.pending` — the panel shows none and nothing is persisted.
 
 ### 4.4 Third lineage — an editor command (no agent, no wire)
 
@@ -275,7 +280,7 @@ Event catalogue as emitted today (`rg 'audit.record' apps/editor/src`): `session
 | Model choice | deepagents-acp `_session_models[sessionId]` (agent) | `session/new.configOptions` → `HeaderState.configOptions` (editor) | the sidebar select → `session/set_config_option` | header display; the graph is rebuilt with `context.model` | Per session — a case switch or reload returns to the default (`RAD_MODELS[0]`). |
 | Proposals · hunks · decisions | `ProposalStore` | overlay attrs in the Delta (rendering, keyed by hunk id) · sidebar `permission.outcome` (display mirror) | `connection.ts` (from diffs/writes), `apply.ts` (local), radiologist decisions | `HunkControls`, `App.tsx`, `connection.ts` | `markConflicts` reconciles when the Delta cannot host a hunk (INV-2). |
 | Grant | `ProposalStore.grants` keyed by **path** | — | `answer()` on the first accepted hunk | `fs/read` (read-through), `fs/write` (`takeGrant`, single use) | ⚠ One open grant per path — see §8. |
-| Advertised skills | `prompts/skills/*.md` (agent) | sidebar `commands[]` via `available_commands_update` | humans | command menus | — |
+| Advertised skills | the **resolved** layers (builtin + house + personal) | sidebar `commands[]` via `available_commands_update` | humans (three parties) | command menus | The menu reflects whose layers are loaded, so a persona switch changes it |
 | **Audit trail** | `AuditLog.records` (page) plus an environment-specific bridge sink: Redis list on Vercel, JSONL locally | — | `audit.record` · bridge append | *Audit* tab · operators | Delivery is best-effort and unconfirmed; the page copy dies on reload. A local file accumulates across sessions; a hosted list has rolling seven-day expiry. `sessionId` separates sessions. |
 | **Flags** | `FlagStore` | the `ai-flag` mark on the line (rendering; moves with the line, gone with it); sidebar cards | `_rad/flag` via `connection.ts` → `raiseFlag`; radiologist **Acknowledge** | cards, header count, audit; (slice 6) the QA gate | The line anchor is re-derived on arrival by an ordinal walk over the buffer that counts like `canonicalLines`, verified by text, against the text the agent actually read (`peekGrant(path)?.baseText ?? store.read(path)`). An unlocatable line ⇒ card only, audited `line not found`. |
 

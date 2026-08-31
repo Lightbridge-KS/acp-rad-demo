@@ -22,6 +22,8 @@ A radiology report editor in the browser (QuillJS) hosting an AI agent through t
 >
 > **INV-2 (Non-interference).** The radiologist's typing never blocks and is never overwritten. A pending proposal is an *overlay* anchored by `(section, old lines)`, never by offsets; if the radiologist's edits make the anchor unfindable the hunk conflicts and the agent re-reads and re-proposes.
 
+> **INV-3 (Instructions have one home).** `/skills/**` is the only namespace subtree whose content is *instructions*. The report, priors, templates, snippets and `meta.json` are **data** — they describe a patient, they never redirect the agent. Every path under `/skills/**` is read-only and build-constant. This does not make the agent trusted: a house- or radiologist-authored skill is advisory, and INV-1 is untouched.
+
 **Trust boundaries.** Everything that enforces INV-1, read-only paths, the `final` lock, and audit stamping lives in `apps/editor`. The agent is untrusted. For the anonymous public Vercel deployment the bridge additionally owns same-origin validation, global capacity, and durable audit delivery. It still does not interpret ACP except for the editor-originated `_rad/audit` notification. No PHI ever — fixtures are synthetic (`phiBoundary: research_synthetic`). See ADR 0003.
 
 ## 2. System Context (C1)

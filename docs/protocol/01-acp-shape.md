@@ -153,18 +153,20 @@ One session ↔ one accession; `cwd` is the namespace root so a Level 0 agent sc
     { "name": "proofread",  "description": "…", "input": { "hint": "section" } } ] } }
 ```
 
-One `prompts/skills/<name>.md` per entry (`skills.py`). The sidebar keeps them as `commands[]`; the composer's `/` lists skills only.
+One entry per **resolved** skill (ADR 0004): the agent folds its `builtin` layer with the `house` and `personal` layers the Client serves, so the list already reflects the institution's and the radiologist's additions, and hides any skill whose client capability was not negotiated (`/qa` at Level 1). The sidebar keeps them as `commands[]`; the composer's `/` lists skills only.
 
 ### 5.4 `session/prompt`
 
 ```jsonc
-// → agent
-{ "sessionId": "…", "prompt": [ { "type": "text", "text": "/compare" } ] }
+// → agent — the radiologist's words, plus one link per skill they mentioned
+{ "sessionId": "…", "prompt": [
+    { "type": "text", "text": "Please explain the /impression" },
+    { "type": "resource_link", "uri": "/skills/effective/impression/SKILL.md", "name": "impression" } ] }
 // ← agent, when the turn ends
 { "stopReason": "end_turn" }
 ```
 
-Agent-side, a text block matching `^/(name)( arg)?$` is replaced by the skill's body before the model sees it (`RadReportAgentServer.prompt`). `_meta.rad.focus` is schema-declared (`zRadPromptMeta`) but not sent yet. Stop reasons the SDK defines: `end_turn` · `cancelled` · `max_tokens` · `max_turn_requests` · `refusal`; the editor shows a *stopped* marker on `cancelled` and uses a local pseudo-value `error` when the request itself throws.
+A **mention** is `/name` anywhere in the text; the Client detects it against the names the agent advertised and adds a plain ACP `resource_link` beside the prose — no profile extension, and the radiologist's words are never rewritten. Agent-side those links are resolved *before the model runs* and the instructions prepended as their own block (`RadReportAgentServer.prompt`): a mention the radiologist typed is honoured deterministically, while a skill they did **not** name stays the model's own call to read or ignore. `_meta.rad.focus` is schema-declared (`zRadPromptMeta`) but not sent yet. Stop reasons the SDK defines: `end_turn` · `cancelled` · `max_tokens` · `max_turn_requests` · `refusal`; the editor shows a *stopped* marker on `cancelled` and uses a local pseudo-value `error` when the request itself throws.
 
 ### 5.5 `session/update` kinds
 
@@ -277,17 +279,18 @@ Sent with `conn.agent.notify(AUDIT_METHOD, record)` on the same connection; the 
 | Slot | Where | Content |
 |---|---|---|
 | `_meta.rad` | `initialize.params` | client caps (`RadClientCaps`) |
-| `_meta.rad` | `initialize.result` | agent caps + `model` (`RadAgentCaps`) → Level |
+| `_meta.rad` | `initialize.result` | agent caps + `model` + `skillContract` (`RadAgentCaps`) → Level |
 | `_meta.rad` | `session/new.params` | session binding + `manifest` (`RadSessionMeta`) |
 | `_meta.rad` | `session/prompt.params` | `focus` — declared, not sent |
 | `_meta.rad` | `fs/write_text_file.result` | write outcome (`RadWriteOutcome`) — new in the PoC, not in the proposal draft |
 | `_rad/audit` | notification, client → bridge | `AuditRecord` |
 | `_rad/flag` | request, agent → client | `FlagParams` → `{outcome: "acknowledged"}` (Level 2; advertised `/qa` only when the client negotiated `flags`) |
-| conventions | `cwd`, `Diff.path`, `fs/*` paths | always virtual (`/worklist/…`, `/priors/…`, `/templates/…`, `/snippets/…`); no real filesystem |
+| `resource_link` | `session/prompt.params.prompt[]` | a skill **mention** — plain ACP, no profile extension (ADR 0004) |
+| conventions | `cwd`, `Diff.path`, `fs/*` paths | always virtual (`/worklist/…`, `/priors/…`, `/templates/…`, `/snippets/…`, `/skills/…`); no real filesystem |
 | permission options | `session/request_permission.options` | the three clinical verbs; never `*_always` for writes |
 | pruned | `terminal/*`, `mcpServers` | not advertised / empty |
 
-Everything above is enforced on the **client** side — the agent-side pieces (`PermissionRewritingClient`, `FilesystemPermission(deny)`) make a well-behaved agent ask first, but a Level 0 agent that never asks is still gated by the unsolicited-write path.
+Everything above is enforced on the **client** side — the agent-side pieces (`PermissionRewritingClient`, `FilesystemPermission(deny)`) make a well-behaved agent ask first, but a Level 0 agent that never asks is still gated by the unsolicited-write path. `skillContract` is the one entry that is *advisory by design*: it tells a house skill author what they may rely on, and a layer declaring a different version warns rather than failing.
 
 ## 8. Quirks and confirmed contracts (SDK level)
 
@@ -322,6 +325,7 @@ The reason this demo exists: without a protocol, every report editor that wants 
 
 - **The editor has no agent-specific code path.** Its only agent-dependent inputs are `?agent=<id>` and the Level inferred from `initialize._meta.rad`. Three agents sit in `agents.json`; the two registry ones (`claude-agent-acp`, `gemini --experimental-acp`) were never written for a report editor, yet the same `connection.ts` handles them through the unsolicited-write path (§5.9).
 - **The agent has no editor-specific code path.** `rad-agent` knows nothing about Quill or the browser: every byte it sees arrives through `fs/read_text_file`, every byte it proposes leaves through `fs/write_text_file`. `AcpClientBackend` is the entire coupling.
+- **The institution's policy is portable across agents** (ADR 0004). A skill is an Agent-Skills folder, and the `house` and `personal` layers are served *by the Client* at `/skills/{layer}/{name}/SKILL.md`. So a hospital authors its impression policy once and every agent that connects picks it up by reading the namespace it already reads. Note the honest bound: **base** skills ship with the agent, because skill text restates the system prompt it was written against, and technique that travels to a model it was not tuned for is worse than no technique. What is portable is house policy, not every skill.
 - **Swapping is safe because the invariants sit on the client.** INV-1, the read-only rules, the `final` lock and the audit are enforced in `apps/editor` (§7), so an unknown agent can be plugged in *without being trusted*. This is the strongest thing the demo shows: not the arithmetic, but why the arithmetic is acceptable in a clinical setting.
 
 ### 9.2 Not yet demonstrated — the numbers

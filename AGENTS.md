@@ -8,11 +8,11 @@ Demo: a radiology report editor (QuillJS, browser) hosting an AI agent through t
 - `docs/design/01-system-architecture.md` — C1–C3, key flows, the profile as exercised, invariants.
 - `docs/design/02-surface-architecture.md` — what the radiologist and the agent see: commands, `/` menu, the human gate, lifecycle.
 - `docs/design/03-agentic-architecture.md` — the agent's organs: loop, tools over `fs/*`, the HITL gate split across the boundary.
-- `docs/design/04-skills.md` — the agent's skills (`/impression` · `/compare` · `/proofread`) as prompt expansions: contract, expansion text, guardrails, the boundary with `/qa`.
+- `docs/design/04-skills.md` — the agent's skills as Agent-Skills folders layered **builtin → house → personal** (ADR 0004): contract, instruction text, guardrails, the boundary with `/qa`.
 - `docs/design/05-data-architecture.md` — where data rests and how it moves: the report as system of record, the namespace, proposals/grants, the audit lineage.
 - `docs/design/06-report-parsing.md` — text → sections: the canonical writer vs the tolerant reader, the label rule, the section profile, absent sections and the static manifest.
 - `docs/protocol/01-acp-shape.md` — ACP v1 as spoken here: method surface, session lifecycle, every message shape, the profile's footprint, and the M×N → M+N analysis (§9) — the reason this demo exists.
-- `docs/progress/overview-demo.md` — where we are; update it as slices land. Sub-tracker: `docs/progress/report-parsing.md`.
+- `docs/progress/overview-demo.md` — where we are; update it as slices land. Sub-trackers: `docs/progress/report-parsing.md`, `docs/progress/skills-layered.md`.
 - `docs/ideas/acp-rad-protocol-proposal.md` — the profile proposal (draft; deltas listed in design 01 §8). Original one-file draft: `docs/archive/design/acp-rad-poc-spec.md` (§0 survey, §11 ledger).
 - `docs/dev/running.md` — how to run and switch models.
 

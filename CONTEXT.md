@@ -141,8 +141,24 @@ An editor command that produces the whole report buffer: `/template`, `/short-pr
 An editor command that places one snippet at its home: `/er-reviewed`, `/er-not-reviewed`, `/discuss-with-dr`.
 
 **Skill**:
-A command the agent advertises and performs; its result is a proposal.
+A named set of instructions the agent advertises and performs; its result is a proposal (or, for `/qa`, flags). On disk it is an Agent-Skills folder — `<name>/SKILL.md`, frontmatter plus a Markdown body.
 _Avoid_: agent command, slash command, tool (a tool is what the agent calls internally)
+
+**Skill layer**:
+One of the three parties that may author a skill, in precedence order: **builtin** (ships with the agent, authored by whoever owns the system prompt), **house** (the institution), **personal** (the individual radiologist). A later layer replaces an ordinary skill of the same name.
+
+**Sealed skill**:
+A base skill later layers may extend but never replace — their bodies are appended below it. `/qa` is the one, because a weakened check produces *no flag*, and an absence is not reviewable. Ordinary skills are replaced outright.
+
+**Effective skill**:
+The one instruction set the agent actually runs for a name, after every layer has had its say. Served at `/skills/effective/{name}/SKILL.md`; the text the audit trail hashes.
+
+**Mention**:
+`/name` written anywhere in a prompt — an ordinary sentence may carry one ("please run /qa on this"). The editor sends it as an ACP `resource_link`; the agent loads that skill's instructions before the model runs.
+_Avoid_: slash command (an editor command is that; a mention invokes the agent)
+
+**Skill contract**:
+The surface a skill author outside the agent may rely on — grammar, tool names, path shapes, standing rules — advertised at `initialize`. It exists so an institution can author skills against an agent whose system prompt it cannot read.
 
 **Home**:
 The fixed place in the report where a snippet belongs regardless of where the command was summoned — the impression head or the report end.
