@@ -1,24 +1,17 @@
 /**
- * Section partition of a canonical report (design §5.5).
+ * Section partition of a report (design 06).
  *
- * A line matching `**HISTORY:**` / `**TECHNIQUE(S):**` / `**COMPARISON:**` / `**FINDINGS:**` /
- * `**IMPRESSION:**` starts that section; it runs to the line before the next label. Lines before
- * the first label are the title (read-only). The header block (contrast, complication, dose,
- * phases) therefore belongs to `technique`. Absent section ⇒ absent file.
+ * A line `labels.ts` recognizes as a section label starts that section; it runs to the line before
+ * the next label, or before a footer line, whichever comes first. Lines before the first label are
+ * the title (read-only). The header block (contrast, complication, dose, phases) therefore belongs
+ * to `technique`. Absent section ⇒ absent range (the store decides what that means on the wire).
+ *
+ * Recognition is tolerant and configurable; what the editor *writes* stays canonical. Both halves
+ * live in `labels.ts` — this module only walks lines.
  */
+import { isFooterLine, sectionIdOfLine, type SectionProfile } from "./labels.ts";
 import { canonicalLines } from "./markdown.ts";
 import type { SectionId } from "./schema.ts";
-
-export const SECTION_LABEL_RE = /^\*\*(HISTORY|TECHNIQUES?|COMPARISON|FINDINGS|IMPRESSION):\*\*/;
-
-const LABEL_TO_ID: Record<string, SectionId> = {
-  HISTORY: "history",
-  TECHNIQUE: "technique",
-  TECHNIQUES: "technique",
-  COMPARISON: "comparison",
-  FINDINGS: "findings",
-  IMPRESSION: "impression",
-};
 
 export type SectionRange = { id: SectionId; start: number; end: number }; // [start, end) line indexes
 
@@ -29,21 +22,22 @@ export type SplitReport = {
   lines: string[];
 };
 
-export function sectionIdOfLine(line: string): SectionId | undefined {
-  const m = SECTION_LABEL_RE.exec(line);
-  return m ? LABEL_TO_ID[m[1]!] : undefined;
-}
-
-export function splitSections(markdown: string): SplitReport {
+export function splitSections(markdown: string, profile?: SectionProfile): SplitReport {
   const lines = canonicalLines(markdown);
   const ranges: SectionRange[] = [];
   let current: SectionRange | undefined;
   let titleEnd = lines.length;
   lines.forEach((line, i) => {
-    const id = sectionIdOfLine(line);
+    // A footer closes the section in progress and opens nothing (design 06 §4).
+    if (current && isFooterLine(line, profile)) {
+      current.end = i;
+      current = undefined;
+      return;
+    }
+    const id = sectionIdOfLine(line, profile);
     if (!id) return;
     if (current) current.end = i;
-    else titleEnd = i;
+    else if (ranges.length === 0) titleEnd = i;
     current = { id, start: i, end: lines.length };
     ranges.push(current);
   });
@@ -53,8 +47,8 @@ export function splitSections(markdown: string): SplitReport {
 }
 
 /** The section's canonical file content, or `undefined` if the section is absent. */
-export function sectionFile(markdown: string, id: SectionId): string | undefined {
-  return splitSections(markdown).sections[id];
+export function sectionFile(markdown: string, id: SectionId, profile?: SectionProfile): string | undefined {
+  return splitSections(markdown, profile).sections[id];
 }
 
 function joinTrimmed(lines: string[]): string {

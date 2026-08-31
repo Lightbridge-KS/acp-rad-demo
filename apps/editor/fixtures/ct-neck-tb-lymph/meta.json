@@ -1,0 +1,15 @@
+{
+  "title": "MDCT OF THE NECK",
+  "session": {
+    "accession": "ACC0000040",
+    "modality": "CT",
+    "region": "neck",
+    "protocol": "contrast",
+    "setting": "OPD",
+    "reportStatus": "draft",
+    "shortPrelim": false,
+    "phiBoundary": "research_synthetic"
+  },
+  "patient": { "ageBand": "40-49", "sex": "F" },
+  "study": { "doseMgy": 24, "doseMgycm": 640, "date": "31/08/2026" }
+}
