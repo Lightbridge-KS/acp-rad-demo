@@ -113,13 +113,14 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
     <aside className="flex h-full flex-col border-l border-gray-200 bg-gray-50">
       <header className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-sm">
         <span className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_DOT[header.status]}`} />
-        <span className="font-medium">{header.agentName ?? "agent"}</span>
+        <img src="/agent-avatar.png" alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0" />
+        <span className="whitespace-nowrap font-medium">{header.agentName ?? "agent"}</span>
         {header.level !== undefined && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs">L{header.level}</span>}
         {model && agent?.setConfigOption ? (
           // Switching mid-turn would swap the agent under the running prompt — wait for the turn.
           <select
             data-testid="model-select"
-            className="max-w-48 truncate rounded border border-gray-300 bg-white px-1 py-0.5 text-xs text-gray-700"
+            className="min-w-0 max-w-48 truncate rounded border border-gray-300 bg-white px-1 py-0.5 text-xs text-gray-700"
             value={model.current}
             disabled={state.isRunning}
             onChange={(e) => void agent.setConfigOption!("model", e.target.value)}
