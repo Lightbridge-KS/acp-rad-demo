@@ -15,6 +15,7 @@ const ctx = (over: Partial<CommandContext> = {}): CommandContext => ({
   caretSection: null,
   caretAtEnd: false,
   hasPriors: false,
+  foreignLabels: false,
   level: 1,
   skills: SKILLS,
   status: "draft",
@@ -32,7 +33,7 @@ describe("listCommands", () => {
   it("suggests /template (and /short-prelim) on a blank buffer", () => {
     const g = listCommands(ctx({ blank: true }));
     expect(g.suggested.map((c) => c.id)).toEqual(["template", "short-prelim"]);
-    expect(g.editor).toHaveLength(5);
+    expect(g.editor).toHaveLength(6);
     expect(g.skills.map((c) => c.id)).toEqual(["impression", "compare"]);
     expect(g.skills[1]!.hint).toBe("[prior accession]");
   });
@@ -114,5 +115,26 @@ describe("runEditorCommand", () => {
     expect(runEditorCommand("er-reviewed", undefined, input({ markdown: withMarker }))).toEqual({ kind: "caret", line: 3 });
     expect(runEditorCommand("discuss-with-dr", undefined, input({ markdown: report }))).toMatchObject({ kind: "insert-line", line: 5, blankBefore: true });
     expect(runEditorCommand("er-reviewed", undefined, input({ markdown: "**T**\n" })).kind).toBe("hint");
+  });
+});
+
+describe("/normalize", () => {
+  const input = (markdown: string): EditorCommandInput => ({ markdown, meta: {}, region: undefined, shortPrelim: false, templates: {}, snippets: {} });
+
+  it("proposes the house wrapper, keeping the author's keyword", () => {
+    const e = runEditorCommand("normalize", undefined, input("**HISTORY**: x\n**TECHNIQUE**: y\n**IMPRESSION**\n"));
+    expect(e).toEqual({ kind: "replace", markdown: "**HISTORY:** x\n**TECHNIQUE:** y\n**IMPRESSION:**\n", shortPrelim: false });
+  });
+
+  it("says so rather than proposing nothing when the report is already house grammar", () => {
+    const e = runEditorCommand("normalize", undefined, input("**HISTORY:** x\n**IMPRESSION:**\n"));
+    expect(e.kind).toBe("hint");
+  });
+
+  it("is suggested only when the buffer holds a foreign label", () => {
+    const ids = (over: Partial<CommandContext>) => flattenCommands(listCommands(ctx(over))).map((c) => c.id);
+    expect(listCommands(ctx({ foreignLabels: true })).suggested.map((c) => c.id)).toContain("normalize");
+    expect(listCommands(ctx({ foreignLabels: false })).suggested.map((c) => c.id)).not.toContain("normalize");
+    expect(ids({ foreignLabels: false })).toContain("normalize"); // still in the Editor group
   });
 });

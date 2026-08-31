@@ -9,7 +9,7 @@
  */
 import type Quill from "quill";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type ReactNode, type Ref } from "react";
-import { canonicalLines, markdownToDelta, resolvePath, sectionIdOfLine, type AuditRecord, type FlagParams, type ReportStatus, type SectionId } from "acp-rad";
+import { canonicalLines, markdownToDelta, normalizeLabels, resolvePath, sectionIdOfLine, type AuditRecord, type FlagParams, type ReportStatus, type SectionId } from "acp-rad";
 import { defaultBridgeUrl } from "./agent/bridgeUrl.ts";
 import { connectAgent, type AgentHandle } from "./agent/connection.ts";
 import { AuditLog } from "./audit/log.ts";
@@ -409,6 +409,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
       caretSection: caret.caretSection,
       caretAtEnd: caret.caretAtEnd,
       hasPriors: Object.keys(fixture.priors).length > 0,
+      foreignLabels: normalizeLabels(markdown) !== markdown,
       level: header.status === "ready" ? header.level : undefined,
       skills: state.commands,
       status,

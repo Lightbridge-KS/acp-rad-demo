@@ -6,7 +6,7 @@
  * `runEditorCommand` is pure: it turns a command into an *effect* over canonical Markdown that
  * `apply.ts` performs on the live Quill buffer. Nothing in this file touches Quill or React.
  */
-import type { ProfileLevel, ReportStatus, SectionId } from "acp-rad";
+import { normalizeLabels, type ProfileLevel, type ReportStatus, type SectionId } from "acp-rad";
 import { foldInShortPrelim, instantiateTemplate, isBlankBuffer, regionSnippetId, shortPrelimDocument, templateIdFor } from "./document.ts";
 import type { CaseMeta } from "./meta.ts";
 import { placeSnippet } from "./snippet.ts";
@@ -31,6 +31,7 @@ export const EDITOR_COMMANDS: readonly Command[] = [
   { id: "er-reviewed", kind: "snippet", description: "Attending has reviewed this preliminary report (impression head)" },
   { id: "er-not-reviewed", kind: "snippet", description: "Not yet reviewed by the attending (impression head)" },
   { id: "discuss-with-dr", kind: "snippet", description: "Record who the findings were discussed with (report end)" },
+  { id: "normalize", kind: "document", description: "Format section labels to house grammar" },
 ];
 
 export type CommandContext = {
@@ -40,6 +41,8 @@ export type CommandContext = {
   /** The caret sits on the report's last line. */
   caretAtEnd: boolean;
   hasPriors: boolean;
+  /** The buffer holds a section label that is not in house grammar (a pasted report). */
+  foreignLabels: boolean;
   /** Agent level; `undefined` while disconnected. Level 0 skills are the host user's — hidden. */
   level: ProfileLevel | undefined;
   skills: readonly SkillCommand[];
@@ -70,6 +73,7 @@ export function listCommands(ctx: CommandContext): CommandGroups {
   }
   if (ctx.caretSection === "comparison" || ctx.hasPriors) suggest("compare");
   if (ctx.caretAtEnd && !ctx.blank) suggest("discuss-with-dr");
+  if (ctx.foreignLabels) suggest("normalize");
   return { suggested, editor, skills };
 }
 
@@ -157,6 +161,13 @@ export function runEditorCommand(id: string, arg: string | undefined, input: Edi
         return { kind: "replace", markdown: foldInShortPrelim(skeleton, input.markdown), shortPrelim: false, folded: true };
       }
       return { kind: "replace", markdown: skeleton, shortPrelim: false };
+    }
+    case "normalize": {
+      // Never on paste, never silent: the rewrite is proposed as tracked changes like any other
+      // change, which demonstrates the human gate rather than bypassing it (design 06 §2).
+      const normalized = normalizeLabels(input.markdown);
+      if (normalized === input.markdown) return { kind: "hint", text: "every section label is already in house grammar" };
+      return { kind: "replace", markdown: normalized, shortPrelim: input.shortPrelim };
     }
     case "short-prelim": {
       const snippetId = regionSnippetId(arg ?? input.region);
