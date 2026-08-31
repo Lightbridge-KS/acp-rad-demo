@@ -110,7 +110,10 @@ describe("no regression against the strict form", () => {
   // The recognizer this replaces. Tolerance must be purely additive on text the editor already
   // parsed — every fixture but the deliberately foreign one must yield the identical label set.
   const STRICT = /^\*\*(HISTORY|TECHNIQUES?|COMPARISON|FINDINGS|IMPRESSION):\*\*/;
-  const files = fixtureFiles().filter((f) => !f.includes("ct-neck-tb-lymph"));
+  // Reports, priors, templates and snippets only. `/skills/**` is instructions, not a report
+  // (INV-3): a skill body is prose about label lines rather than a document made of them, so
+  // holding it to the report grammar would fail the next author for no clinical reason.
+  const files = fixtureFiles().filter((f) => !f.includes("ct-neck-tb-lymph") && !f.includes("/skills/"));
 
   it("finds fixtures to check", () => {
     expect(files.length).toBeGreaterThan(15);

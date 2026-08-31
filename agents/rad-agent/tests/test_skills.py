@@ -559,3 +559,51 @@ async def test_skills_middleware_discovers_them_through_the_composite_route() ->
     read = await backend.aread(qa["path"])
     assert read.error is None
     assert "Also check the prelim marker." in str(read.file_data)
+
+
+# ---------------------------------------------------------------------------
+# The authoring contract
+# ---------------------------------------------------------------------------
+
+
+def test_skill_contract_names_the_surface_a_house_author_may_rely_on() -> None:
+    from rad_agent.skills import SKILL_CONTRACT_VERSION, skill_contract
+
+    contract = skill_contract()
+    assert contract["version"] == SKILL_CONTRACT_VERSION
+    assert "read_file" in contract["tools"]
+    assert "/worklist/{accession}/sections/{id}.md" in contract["namespace"]
+    assert "never-invent" in contract["rules"]
+
+
+def test_the_contract_only_offers_raise_flag_where_the_client_negotiated_flags() -> None:
+    from rad_agent.skills import skill_contract
+
+    # A house skill written against a Level-1 agent must not be told it may instruct a tool
+    # that will not be bound.
+    assert "raise_flag" not in skill_contract()["tools"]
+    assert "raise_flag" in skill_contract({"flags": True})["tools"]
+
+
+async def test_a_layer_declaring_a_different_contract_warns_but_still_loads(caplog) -> None:
+    import logging
+
+    stale = "---\nname: qa\ndescription: old\nmetadata:\n  contract: '0.9'\n---\nExtra check.\n"
+    with caplog.at_level(logging.WARNING):
+        backend = await _backend({"/skills/house/qa/SKILL.md": stale}, caps={"flags": True})
+        skills = await backend.skills()
+    # Advisory, not fatal: an institution's skill keeps working while someone reads the warning.
+    assert "Extra check." in skills["qa"].body
+    assert any("declares contract 0.9" in r.getMessage() for r in caplog.records)
+
+
+async def test_initialize_advertises_the_contract() -> None:
+    from acp.schema import Implementation
+
+    server = RadReportAgentServer()
+    response = await server.initialize(
+        1, client_info=Implementation(name="editor", version="0.1.0"), rad={"flags": True}
+    )
+    rad = response.field_meta["rad"]  # type: ignore[index]
+    assert rad["skillContract"]["version"]
+    assert "raise_flag" in rad["skillContract"]["tools"]

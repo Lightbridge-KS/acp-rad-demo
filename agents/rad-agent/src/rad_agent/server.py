@@ -47,6 +47,7 @@ from rad_agent.skills import (
     EffectiveSkillsBackend,
     advertise,
     mentioned_skills,
+    skill_contract,
     skill_name_from_path,
 )
 
@@ -182,7 +183,15 @@ class RadReportAgentServer(AgentServerACP):
         return response.model_copy(
             update={
                 "agent_info": Implementation(name=AGENT_NAME, version="0.1.0"),
-                "field_meta": {RAD_META_KEY: {**AGENT_RAD_CAPS, "model": model_spec()}},
+                # `skillContract` publishes the surface a *house* skill author may rely on —
+                # they write against an agent whose system prompt they cannot read.
+                "field_meta": {
+                    RAD_META_KEY: {
+                        **AGENT_RAD_CAPS,
+                        "model": model_spec(),
+                        "skillContract": skill_contract(self.client_rad_caps),
+                    }
+                },
             }
         )
 

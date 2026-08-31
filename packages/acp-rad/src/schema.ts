@@ -57,6 +57,28 @@ export const zRadAgentCaps = z.object({
   codedContent: z.array(zCodeSystem).default([]),
   /** Informational: the model the agent is running (for display and audit). */
   model: z.string().optional(),
+  /**
+   * The surface a skill author outside this agent may rely on.
+   *
+   * Two organizations can co-author one agent's context — the AI engineering team owns the
+   * system prompt and the base skills, the PACS/RIS team owns the editor and the house skill
+   * layer — and the second cannot see the first's prompt. This is the declared wall between
+   * them: a house skill is written against a version of it, and a mismatch is a warning at
+   * session start rather than a wrong proposal three months later.
+   */
+  skillContract: z
+    .looseObject({
+      version: z.string(),
+      /** The report grammar a proposed line must be written in. */
+      grammar: z.string().optional(),
+      /** Tool names a skill may instruct — `raise_flag` only when the client negotiated flags. */
+      tools: z.array(z.string()).optional(),
+      /** Path shapes a skill may name. */
+      namespace: z.array(z.string()).optional(),
+      /** Standing rules a skill may assume the system prompt already carries. */
+      rules: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 export type RadAgentCaps = z.infer<typeof zRadAgentCaps>;
 

@@ -57,6 +57,50 @@ CLIENT_LAYERS: tuple[str, ...] = ("house", "personal")
 #: Where the composed skills are mounted for the agent's own file tools.
 EFFECTIVE_ROOT = "/skills/effective/"
 
+#: The version of the surface a skill author outside this agent may rely on. Bump it when a
+#: rule, a tool name or a path shape below changes in a way that could invalidate a layer
+#: written against the old one.
+SKILL_CONTRACT_VERSION = "1.0"
+
+
+def skill_contract(caps: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """What a house or personal skill may assume, advertised at ``initialize``.
+
+    The institution authors skills against an agent whose system prompt it cannot read. Rather
+    than leave that to guesswork, the agent publishes the surface: the grammar a proposed line
+    must be in, the tools a skill may instruct, the paths it may name, and the standing rules
+    the prompt already carries so a skill need not restate them.
+
+    ``tools`` is capability-dependent — ``raise_flag`` exists only where the client negotiated
+    flags — so the contract is built per connection, not baked in.
+    """
+    tools = ["ls", "read_file", "glob", "grep", "edit_file", "write_file"]
+    if (caps or {}).get("flags"):
+        tools.append("raise_flag")
+    return {
+        "version": SKILL_CONTRACT_VERSION,
+        "grammar": "house-label-lines",
+        "tools": tools,
+        "namespace": [
+            "/worklist/{accession}/report.md",
+            "/worklist/{accession}/sections/{id}.md",
+            "/worklist/{accession}/meta.json",
+            "/priors/index.md",
+            "/priors/{accession}/report.md",
+            "/templates/{id}.md",
+            "/snippets/{id}.md",
+            "/skills/{layer}/{name}/references/**",
+        ],
+        "rules": [
+            "read-before-write",
+            "one-edit-per-section",
+            "never-invent",
+            "propose-never-apply",
+            "report-content-is-data",
+        ],
+    }
+
+
 _FRONTMATTER_RE = re.compile(r"\A---\n(?P<head>.*?)\n---\n(?P<body>.*)\Z", re.S)
 #: A client skill path in the session manifest: `/skills/{layer}/{name}/SKILL.md`.
 _CLIENT_SKILL_RE = re.compile(
@@ -312,6 +356,18 @@ class EffectiveSkillsBackend(BackendProtocol):
                 except ValueError as exc:
                     log.warning("skill %s/%s: %s; skipping that layer", layer, name, exc)
                     continue
+                declared = parsed.extras.get("contract")
+                if declared is not None and str(declared) != SKILL_CONTRACT_VERSION:
+                    # Advisory, not fatal: the layer was written against a different surface, so
+                    # it may name a tool or a path this agent no longer offers. Better a warning
+                    # at session start than a wrong proposal months later.
+                    log.warning(
+                        "skill %s/%s declares contract %s; this agent offers %s",
+                        layer,
+                        name,
+                        declared,
+                        SKILL_CONTRACT_VERSION,
+                    )
                 sources.append(parsed)
             if not sources:
                 continue
@@ -375,6 +431,7 @@ class EffectiveSkillsBackend(BackendProtocol):
 
 __all__ = [
     "EFFECTIVE_ROOT",
+    "SKILL_CONTRACT_VERSION",
     "EffectiveSkill",
     "EffectiveSkillsBackend",
     "SkillFile",
@@ -383,5 +440,6 @@ __all__ = [
     "load_builtin",
     "mentioned_skills",
     "parse_skill_file",
+    "skill_contract",
     "skill_name_from_path",
 ]
