@@ -62,13 +62,20 @@ describe("deterministicGate", () => {
 });
 
 describe("isQaPrompt", () => {
-  it("matches the bare skill and tolerates whitespace, nothing else", () => {
+  it("matches the mention wherever it sits in the sentence", () => {
     expect(isQaPrompt("/qa")).toBe(true);
     expect(isQaPrompt(" /qa \n")).toBe(true);
     expect(isQaPrompt("/qa please")).toBe(true);
+    // The reason this is not start-anchored: a mention rides inside prose, and an anchored test
+    // would let this turn write to the report during the one check that may only raise flags.
+    expect(isQaPrompt("run /qa")).toBe(true);
+    expect(isQaPrompt("before I sign off, please run /qa on this")).toBe(true);
+  });
+
+  it("does not match a slash inside a word, another skill, or nothing at all", () => {
     expect(isQaPrompt("/qatar")).toBe(false);
     expect(isQaPrompt("/impression")).toBe(false);
-    expect(isQaPrompt("run /qa")).toBe(false);
+    expect(isQaPrompt("the study on dd/qa/yyyy")).toBe(false);
     expect(isQaPrompt(null)).toBe(false);
     expect(isQaPrompt(undefined)).toBe(false);
   });

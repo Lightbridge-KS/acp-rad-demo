@@ -7,7 +7,7 @@ import type * as acp from "@assistant-ui/react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useReducer } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { Command, CommandGroups } from "../commands/registry.ts";
+import type { CommandGroups } from "../commands/registry.ts";
 import type { Flag } from "../report/flags.ts";
 import { Sidebar, type AgentPort, type HeaderState } from "./Sidebar.tsx";
 import { initialSidebarState, sidebarReducer, type SidebarAction } from "./store.ts";
@@ -18,14 +18,13 @@ type HarnessProps = {
   agent: AgentPort;
   header?: HeaderState;
   commands?: () => CommandGroups;
-  onCommand?: (c: Command) => void;
   flags?: Flag[];
   onAcknowledge?: (id: string) => void;
   onLocate?: (id: string) => void;
   onReconnect?: () => void;
 };
 
-function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onLocate, onReconnect }: HarnessProps) {
+function Harness({ agent, header, commands, flags, onAcknowledge, onLocate, onReconnect }: HarnessProps) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   dispatchRef = dispatch;
   return (
@@ -36,7 +35,6 @@ function Harness({ agent, header, commands, onCommand, flags, onAcknowledge, onL
       agent={agent}
       audit={[]}
       commands={commands}
-      onCommand={onCommand}
       flags={flags}
       onAcknowledge={onAcknowledge}
       onLocate={onLocate}
@@ -187,26 +185,49 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("tool").textContent).toMatch(/^flag/);
   });
 
-  it("composer / lists skills only and runs the picked one — editor commands are not chat", async () => {
+  it("composer / lists skills only, and picking one inserts a mention instead of sending", async () => {
     const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
-    const onCommand = vi.fn();
     const groups: CommandGroups = {
       suggested: [],
       editor: [{ id: "template", kind: "document", description: "Scaffold the house template" }],
       skills: [{ id: "impression", kind: "skill", description: "Draft the impression" }],
     };
-    render(<Harness agent={agent} commands={() => groups} onCommand={onCommand} />);
+    render(<Harness agent={agent} commands={() => groups} />);
     const input = screen.getByPlaceholderText(/Ask the agent/) as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "/" } });
-    input.setSelectionRange(1, 1);
+    fireEvent.change(input, { target: { value: "Please explain the /" } });
+    input.setSelectionRange(20, 20);
     fireEvent.select(input);
     const item = await screen.findByText("/impression");
-    expect(screen.queryByText("/template")).toBeNull();
+    expect(screen.queryByText("/template")).toBeNull(); // editor commands are not chat
     await act(async () => {
       fireEvent.click(item);
     });
-    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({ id: "impression", kind: "skill" }));
-    expect(onCommand).not.toHaveBeenCalledWith(expect.objectContaining({ id: "template" }));
+    // The mention lands in the sentence; the words around it survive, and nothing is sent yet —
+    // the radiologist is still writing.
+    expect(input.value).toContain("Please explain the /impression");
+    expect(agent.prompt).not.toHaveBeenCalled();
+  });
+
+  it("composer / filters by the typed query, ranking the named skill first", async () => {
+    const agent: AgentPort = { prompt: vi.fn(async () => "end_turn"), cancel: vi.fn(async () => {}), setConfigOption: vi.fn(async () => {}) };
+    const groups: CommandGroups = {
+      suggested: [],
+      editor: [],
+      skills: [
+        { id: "compare", kind: "skill", description: "Compare with priors" },
+        // Its description mentions the impression, so a description-only match would win.
+        { id: "proofread", kind: "skill", description: "Fix wording; align the impression to the findings" },
+        { id: "impression", kind: "skill", description: "Draft the impression" },
+      ],
+    };
+    render(<Harness agent={agent} commands={() => groups} />);
+    const input = screen.getByPlaceholderText(/Ask the agent/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "/impr" } });
+    input.setSelectionRange(5, 5);
+    fireEvent.select(input);
+    const items = await screen.findAllByText(/^\/[a-z]+$/);
+    expect(items[0]!.textContent).toBe("/impression");
+    expect(items.map((i) => i.textContent)).not.toContain("/compare");
   });
 });
 

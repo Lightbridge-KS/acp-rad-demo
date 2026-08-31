@@ -15,7 +15,9 @@ import {
   RAD_ERRORS,
   RAD_META_KEY,
   RadError,
+  effectiveSkillPath,
   levelOf,
+  mentionedSkills,
   readRadAgentCaps,
   sliceLines,
   worklistRoot,
@@ -112,10 +114,20 @@ export async function connectAgent(
   const stream = createWebSocketStream(url);
   /** The prompt text of the turn in flight (`session/prompt` sent, response pending). */
   let activeTurn: string | null = null;
+  /**
+   * Skill names the agent advertised. Kept here rather than read back from the sidebar so the
+   * connection can turn a `/mention` into a `resource_link` without the UI's help — and so a
+   * skill the agent never offered stays ordinary prose.
+   */
+  let advertised: string[] = [];
   const refuseReason = (): RefuseReason | null => (store.reportStatus() === "final" ? "final" : isQaPrompt(activeTurn) ? "qa" : null);
   const conn = acp
     .client({ name: CLIENT_INFO.name })
-    .onNotification(acp.methods.client.session.update, (ctx) => events.onUpdate(ctx.params.update))
+    .onNotification(acp.methods.client.session.update, (ctx) => {
+      const update = ctx.params.update;
+      if (update.sessionUpdate === "available_commands_update") advertised = update.availableCommands.map((c) => c.name);
+      events.onUpdate(update);
+    })
     .onRequest(acp.methods.client.fs.readTextFile, (ctx) => {
       const { path, line, limit } = ctx.params;
       // While a grant is open, the agent sees the section as it was shown it (design §5.7):
@@ -259,9 +271,17 @@ export async function connectAgent(
       if (activeTurn !== null) throw new Error("a turn is already running");
       activeTurn = text;
       try {
+        // A `/mention` rides as a standard ACP `resource_link` beside the radiologist's own
+        // words, which are never rewritten. The link is what makes the invocation structural:
+        // the agent resolves it deterministically instead of inferring intent from prose.
+        const mentions = mentionedSkills(text, advertised).map((name) => ({
+          type: "resource_link" as const,
+          uri: effectiveSkillPath(name),
+          name,
+        }));
         return await conn.agent.request(acp.methods.agent.session.prompt, {
           sessionId,
-          prompt: [{ type: "text", text }],
+          prompt: [{ type: "text", text }, ...mentions],
         });
       } finally {
         activeTurn = null;

@@ -623,7 +623,6 @@ export function Workspace({ fixture, role, persona, ref, headerStart, banner }: 
         agent={agentPort}
         audit={auditRecords}
         commands={commands}
-        onCommand={runCommand}
         flags={openFlags}
         onAcknowledge={acknowledgeFlag}
         onLocate={locateFlag}

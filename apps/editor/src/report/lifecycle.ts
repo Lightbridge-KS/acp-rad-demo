@@ -8,7 +8,7 @@
  * The deterministic gate never goes to a model: pending changes, unreviewed text and
  * template blanks are facts the editor already holds. Pure functions; no React, no Quill.
  */
-import type { ReportStatus } from "acp-rad";
+import { mentionedSkills, type ReportStatus } from "acp-rad";
 import { isBlankBuffer } from "../commands/document.ts";
 
 export type Role = "resident" | "attending";
@@ -81,7 +81,14 @@ export function describeBlockers(blockers: Blocker[]): string {
   return blockers.map(describeBlocker).join(" · ");
 }
 
-/** The one definition of "this turn is `/qa`" — shared by the connection (write refusal) and the gate. */
+/**
+ * The one definition of "this turn is `/qa`" — shared by the connection (write refusal) and the
+ * gate.
+ *
+ * Matches a mention **anywhere** in the prompt, not only at the start. Once a skill can be named
+ * mid-sentence, an anchored test would let *"please run /qa on this"* through the write lock,
+ * and the agent could edit the report during the very turn that is only allowed to flag it.
+ */
 export function isQaPrompt(text: string | null | undefined): boolean {
-  return typeof text === "string" && /^\/qa(\s|$)/.test(text.trim());
+  return typeof text === "string" && mentionedSkills(text, ["qa"]).length > 0;
 }

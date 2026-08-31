@@ -9,15 +9,15 @@
  * The composer's `/` lists the agent's **skills only** (assistant-ui's trigger popover,
  * unstable API, pinned 0.15.17): the chat box is the agent's channel, so a deterministic
  * editor command never runs from it (KS, 2026-08-30 — those live in `Commands ▾` and the
- * in-report `/`). A skill is sent as `/name`; one with an argument hint is only typed in.
+ * in-report `/`). Picking a skill **inserts** `/name` at the caret, leaving the rest of the
+ * sentence intact — it is a mention, not a command that consumes the prompt.
  */
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  unstable_useSlashCommandAdapter,
-  useAui,
+  unstable_useMentionAdapter,
   useExternalStoreRuntime,
   type AppendMessage,
   type ToolCallMessagePartProps,
@@ -25,7 +25,7 @@ import {
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { AuditRecord, FlagKind, ProfileLevel } from "acp-rad";
 import { useMemo, useState, type Dispatch } from "react";
-import { GROUP_LABEL, matchScore, type Command, type CommandGroups } from "../commands/registry.ts";
+import { GROUP_LABEL, matchScore, type CommandGroups } from "../commands/registry.ts";
 import type { Flag } from "../report/flags.ts";
 import { convertMessage } from "./convert.ts";
 import type { AcpMessage, SidebarAction, SidebarState } from "./store.ts";
@@ -67,8 +67,6 @@ type Props = {
   audit: AuditRecord[];
   /** The command registry; the composer's `/` menu shows its Skills group only. */
   commands?: () => CommandGroups;
-  /** Run an argument-less skill picked in the composer. */
-  onCommand?: (command: Command) => void;
   /** Open flags, newest last. */
   flags?: Flag[];
   onAcknowledge?: (flagId: string) => void;
@@ -87,7 +85,20 @@ const STATUS_DOT: Record<HeaderState["status"], string> = {
 
 const EMPTY_GROUPS: CommandGroups = { suggested: [], editor: [], skills: [] };
 
-export function Sidebar({ state, dispatch, header, agent, audit, commands, onCommand, flags = [], onAcknowledge, onLocate, onReconnect }: Props) {
+/**
+ * A skill mention serializes to plain `/name` — the text the radiologist would have typed.
+ *
+ * The library's default formatter emits a directive (`:command[/qa]{name=qa}`), which is machine
+ * -readable but reads as noise in a plain `<textarea>`, and would have to be stripped again
+ * before the prompt went out. Plain text means a menu-picked mention and a hand-typed one are
+ * the same thing by construction — the connection detects both the same way.
+ */
+const SKILL_MENTION_FORMAT = {
+  serialize: (item: { label?: string; id: string }) => item.label ?? `/${item.id}`,
+  parse: (text: string) => [{ kind: "text" as const, text }],
+};
+
+export function Sidebar({ state, dispatch, header, agent, audit, commands, flags = [], onAcknowledge, onLocate, onReconnect }: Props) {
   const runtime = useExternalStoreRuntime<AcpMessage>({
     messages: state.messages,
     isRunning: state.isRunning,
@@ -174,7 +185,7 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
               )}
               {header.error && <p className="text-red-600">{header.error}</p>}
             </ThreadPrimitive.Viewport>
-            <Composer canSend={canSend} commands={commands} onCommand={onCommand} />
+            <Composer canSend={canSend} commands={commands} />
           </ThreadPrimitive.Root>
         </AssistantRuntimeProvider>
       )}
@@ -182,23 +193,14 @@ export function Sidebar({ state, dispatch, header, agent, audit, commands, onCom
   );
 }
 
-function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands?: () => CommandGroups; onCommand?: (c: Command) => void }) {
-  const aui = useAui();
+function Composer({ canSend, commands }: { canSend: boolean; commands?: () => CommandGroups }) {
   const groups = commands?.() ?? EMPTY_GROUPS;
   // Skills only: editor commands are not chat (design 02 §2.2).
   const entries = useMemo(() => groups.skills.map((c) => ({ id: c.id, command: c })), [groups]);
-  const slash = unstable_useSlashCommandAdapter({
-    removeOnExecute: true,
-    commands: entries.map(({ id, command: c }) => ({
-      id,
-      label: `/${c.id}`,
-      description: c.description,
-      execute: () => {
-        // A skill with an argument is only typed in; the radiologist completes and sends it.
-        if (c.kind === "skill" && c.hint) aui.composer.setText(`/${c.id} `);
-        else onCommand?.(c);
-      },
-    })),
+  const slash = unstable_useMentionAdapter({
+    includeModelContextTools: false,
+    items: entries.map(({ id, command: c }) => ({ id, type: "skill", label: `/${c.id}`, description: c.description })),
+    formatter: SKILL_MENTION_FORMAT,
   });
   // assistant-ui's search matches descriptions too; rank by id first so a skill named in the
   // query always comes before one that merely mentions it.
@@ -227,7 +229,7 @@ function Composer({ canSend, commands, onCommand }: { canSend: boolean; commands
           data-testid="composer-slash"
           className="absolute right-2 bottom-full left-2 z-30 mb-1 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
         >
-          <ComposerPrimitive.Unstable_TriggerPopover.Action {...slash.action} />
+          <ComposerPrimitive.Unstable_TriggerPopover.Directive {...slash.directive} />
           <ComposerPrimitive.Unstable_TriggerPopoverItems>
             {(items) => {
               return items.map((item, index) => {

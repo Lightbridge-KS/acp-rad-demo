@@ -35,15 +35,17 @@ Engineering team owns harness + prompt + skills. In both, the radiologist custom
   **Deviations from the plan, both deliberate:**
   - **No `/skills/builtin/` route.** The plan exposed the builtin layer for transparency. It is not exposed: a model that read `/skills/builtin/qa/SKILL.md` would get the *un-composed* base and silently miss the house and personal checks — precisely the failure sealing exists to prevent. `EffectiveSkillsBackend` reads builtin from local disk internally instead.
   - **`_fetch_result` returns `(content, error, missing)`.** A first cut mapped `-32004` to the literal `file_not_found` inside the shared read path, which regressed the message the *model* sees on an ordinary missing read — caught by `test_aread_maps_client_error_to_result`. The two callers want different things from the same failure, so the flag is separate from the message.
-- [ ] **S3. Composer mentions** (`apps/editor`) — `removeOnExecute: false` + a formatter serializing to plain `/name`; full description in the popup; mentions sent as ACP `resource_link` blocks; `AgentPort.prompt` widens to content blocks; `isQaPrompt` decided from the structured mentions.
+- [x] **S3. Composer mentions** (2026-08-31) — the composer's `/` switches from `unstable_useSlashCommandAdapter` + `.Action` (which *ran* the skill) to `unstable_useMentionAdapter` + `.Directive` with a formatter serializing to plain `/name`, so picking a skill **inserts a mention** and the sentence around it survives. `mentionedSkills` / `effectiveSkillPath` land in `packages/acp-rad/src/skills.ts` — profile-as-code, shared by the write lock and the wire. `isQaPrompt` is no longer start-anchored. Verified: `just check` green (189 + 10 + 129 TS, 85 py).
+  **`AgentPort` did not widen** (plan said it would). `connection.ts` tracks the advertised names from `available_commands_update` and derives the mentions from the outgoing text itself, so `prompt(text)` stays one argument and no call site changed. The upside is bigger than the diff saved: a hand-typed `/impression` and a menu-picked one are the same thing *by construction*, rather than two paths that must be kept in agreement.
+  **`Sidebar.onCommand` is gone.** With mentions there is nothing for the composer to *run* — the radiologist picks, keeps typing, then sends.
 - [ ] **S4. Audit provenance** — `zAuditRecord` and `AuditFields` gain model spec, skill layer and body hash; `skill` added to `AUDIT_FAMILIES` (and the missing `short_prelim` fixed). *(Personas landed in S1.)*
 - [ ] **S5. Skill contract + references** — `_meta.rad.skillContract` at `initialize` with a mismatch warning; one skill carrying `references/` material loaded on demand.
 - [ ] **S6. Docs** — ADR 0004; 04 §1–2 rewritten; 03 §5/§9 (resolve the 💡, correct the defense-in-depth claim); 01 invariants (INV-3) + §7; 02 §2.2/§2.3; 05 namespace + manifest; protocol §5.3/§7/§9; `CONTEXT.md` **Skill**; parent tracker.
 
 ## Now / Next
 
-- **Now:** S3 — the composer's `/` leaves the mention in the sentence and sends it structurally.
-- **Next:** S4–S6 in order. Nothing here is parallelizable across steps — each leaves `just check` green and the demo runnable.
+- **Now:** S4 — audit context provenance (model spec, skill layer, body hash).
+- **Next:** S5–S6 in order. `just smoke` has not been re-run since S2; the live gate needs port 8787 and a hosted model, and its assertions want extending to the layer switch. Nothing here is parallelizable across steps — each leaves `just check` green and the demo runnable.
 
 ## Deferred
 
@@ -63,3 +65,4 @@ Engineering team owns harness + prompt + skills. In both, the radiologist custom
 - **Safety skills compose, they never replace.** `/qa` is `sealed`: later layers append extra checks onto the builtin body. A bad personal `/impression` produces a bad proposal the radiologist rejects; a bad personal `/qa` produces **a flag that never appears** — the failure is an absence, and absences do not show up in review.
 - **The composed body is the unit of provenance.** `SkillMetadata` has no body, so nothing upstream can tell you what actually steered a turn. `EffectiveSkill.digest` hashes the *composed* text, which is why the base and the extended forms of the same skill are distinguishable in the audit — a per-layer hash would not be.
 - **A mention is resolved, not suggested.** The eager path exists because the failure of the lazy one is invisible: a model that decides not to load the house's impression policy still produces a plausible draft, and nothing in the result shows the policy never applied. Discovery stays lazy in the other direction, where the model's judgement is the point.
+- **The write lock cannot be start-anchored.** `isQaPrompt` gates whether the agent may write during a turn. Once a mention rides inside prose, *"please run /qa on this"* must trip it — an anchored test would let the agent edit the report during the one check that is only allowed to flag it.
