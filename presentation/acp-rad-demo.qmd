@@ -4,6 +4,11 @@ subtitle: "on an open protocol — the ACP-Rad demo"
 author: "Kittipos Sirivongrungson"
 date: last-modified
 date-format: "D MMMM YYYY"
+title-slide-attributes:
+  data-background-image: imgs/radreportagent-hex.png
+  data-background-size: 180px
+  data-background-position: 96% 6%
+  data-background-repeat: no-repeat
 ---
 
 # Why {.act}
