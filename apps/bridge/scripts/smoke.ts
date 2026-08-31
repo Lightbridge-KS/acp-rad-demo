@@ -136,6 +136,10 @@ const conn = acp
     const current = store.read(ctx.params.path);
     if (ctx.params.path.endsWith("/report.md")) {
       active.setOps(markdownToDelta(ctx.params.content));
+    } else if (current === "") {
+      // Absent section (design 06 §6): `replace("")` would splice at index 0. Append instead —
+      // the editor places it by SECTION_IDS order, which the smoke has no overlay to model.
+      active.setOps(markdownToDelta(`${store.reportMarkdown()}\n${canonicalize(ctx.params.content)}`));
     } else {
       active.setOps(markdownToDelta(store.reportMarkdown().replace(current, canonicalize(ctx.params.content))));
     }

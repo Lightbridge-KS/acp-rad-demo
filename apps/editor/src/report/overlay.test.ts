@@ -19,6 +19,7 @@ import {
   locateHunk,
   overlayOps,
   pendingHunkIds,
+  sectionInsertionPoint,
   splitLines,
   stripOverlays,
   touchedLines,
@@ -188,5 +189,50 @@ describe("flags", () => {
     const i = lines.findIndex((l) => l.runs.some((r) => r.attributes?.[AI_FLAG] === "f1"));
     lines[i]!.runs.unshift({ insert: "Re-read: " });
     expect(flagLineIndex(joinLines(lines), "f1")).toBeGreaterThan(0);
+  });
+});
+
+describe("creating an absent section (design 06 §6)", () => {
+  const noImpression = ["**TITLE**", "", "**HISTORY:** x", "", "**FINDINGS:**", "**Liver:** Normal."].join("\n") + "\n";
+  const lines = (md: string) => splitLines(markdownToDelta(md));
+
+  it("places a new section after the last earlier one, against its text", () => {
+    // IMPRESSION follows FINDINGS, whose last line is index 5 — so it lands at the end.
+    expect(sectionInsertionPoint(lines(noImpression), "impression")).toBe(6);
+  });
+
+  it("places a new section between the two it belongs between", () => {
+    // FINDINGS goes after HISTORY's body (index 3) and before IMPRESSION (index 5), blank trimmed.
+    const md = ["**TITLE**", "", "**HISTORY:** x", "more history", "", "**IMPRESSION:**", "- b"].join("\n") + "\n";
+    expect(sectionInsertionPoint(lines(md), "findings")).toBe(4);
+  });
+
+  it("places a new section before the first later one", () => {
+    const md = ["**TITLE**", "", "**FINDINGS:**", "- a", "**IMPRESSION:**", "- b"].join("\n") + "\n";
+    expect(sectionInsertionPoint(lines(md), "history")).toBe(2); // at FINDINGS, pushing it down
+    expect(sectionInsertionPoint(lines(md), "comparison")).toBe(2);
+  });
+
+  it("falls back to the end of a report with no sections at all", () => {
+    expect(sectionInsertionPoint(lines("**TITLE**\n\n"), "impression")).toBe(1);
+  });
+
+  it("locateHunk creates instead of conflicting, and the label lands with the content", () => {
+    const before = lines(noImpression);
+    const hunks = buildHunks("", "**IMPRESSION:**\n- Fatty liver.\n");
+    expect(locateHunk(before, "impression", hunks[0]!)).toEqual({ start: 6, count: 0 });
+
+    const { ops: laid, conflicts } = overlayOps(markdownToDelta(noImpression), "impression", hunks);
+    expect(conflicts).toEqual([]);
+    // The overlay shows it; the buffer is untouched until the radiologist decides (INV-1).
+    expect(deltaToMarkdown(stripOverlays(laid))).toBe(noImpression);
+    const shown = splitLines(laid).map((l) => lineText(l));
+    expect(shown).toContain("**IMPRESSION:**");
+    expect(shown).toContain("- Fatty liver.");
+  });
+
+  it("a whole-report proposal still conflicts when it cannot be placed", () => {
+    const hunks = buildHunks("- nowhere to be found\n", "- x\n");
+    expect(locateHunk(lines(noImpression), null, hunks[0]!)).toBeNull();
   });
 });

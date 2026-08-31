@@ -108,11 +108,41 @@ describe("ReportStore", () => {
       expect((e as RadError).code).toBe(RAD_ERRORS.NOT_FOUND);
     }
   });
-  it("manifest lists only present sections", () => {
+  it("manifest lists every canonical section, present or not", () => {
     const m = store.manifest();
     expect(m).toContain("/worklist/ACC0000001/sections/impression.md");
     expect(m).toContain("/snippets/sp-brain.md");
     expect(m.filter((p) => p.includes("/sections/"))).toHaveLength(5);
+  });
+
+  describe("absent sections (design 06 §6)", () => {
+    // The bug: a listing that outlives the state it described. The manifest is snapshotted at
+    // session/new, so it must not depend on which sections happen to exist.
+    let live = markdownToDelta("**FINDINGS:**\n- a\n");
+    const s = createReportStore({ accession: "A", getOps: () => live, meta: {} });
+
+    it("read of an absent section is empty, not -32004", () => {
+      expect(s.read("/worklist/A/sections/impression.md")).toBe("");
+      expect(s.read("/worklist/A/sections/findings.md")).toBe("**FINDINGS:**\n- a\n");
+    });
+
+    it("a present section is never empty, so \"\" is unambiguous", () => {
+      // Even a label with no body carries the label line itself.
+      live = markdownToDelta("**IMPRESSION:**\n");
+      expect(s.read("/worklist/A/sections/impression.md")).toBe("**IMPRESSION:**\n");
+    });
+
+    it("the manifest cannot go stale: same 5 sections whatever the report holds", () => {
+      const before = s.manifest();
+      live = markdownToDelta("nothing but a title\n");
+      expect(s.manifest()).toEqual(before);
+      expect(before.filter((p) => p.includes("/sections/"))).toHaveLength(5);
+    });
+
+    it("an absent section is still writable (the editor creates it)", () => {
+      live = markdownToDelta("**FINDINGS:**\n- a\n");
+      expect(() => s.assertWritable("/worklist/A/sections/impression.md")).not.toThrow();
+    });
   });
   it("reads reflect live ops", () => {
     let live = markdownToDelta("**HISTORY:** a\n");

@@ -9,6 +9,7 @@
  */
 import type { AttributeMap, Op } from "quill";
 import {
+  SECTION_IDS,
   deltaToMarkdown,
   eachLine,
   markdownToDelta,
@@ -97,12 +98,55 @@ export function sectionRange(lines: Line[], section: SectionId | null): { start:
   return start >= 0 ? { start, end: lines.length } : { start: -1, end: -1 };
 }
 
+/**
+ * Where an absent section would be created: after the last section that precedes it in
+ * `SECTION_IDS` order, else after the title block. The Client picks the place because it owns the
+ * canonical grammar; the radiologist still sees the label in the diff and decides it (design 06 §6).
+ */
+export function sectionInsertionPoint(lines: Line[], section: SectionId): number {
+  const rank = (id: SectionId) => SECTION_IDS.indexOf(id);
+  const want = rank(section);
+  let at = -1;
+  let seenLabel = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (isInsertLine(lines[i]!)) continue;
+    const id = sectionIdOfLine(lineText(lines[i]!));
+    if (id === undefined) continue;
+    seenLabel = true;
+    if (rank(id) < want) at = i;
+    else break; // the first later section: everything before it is where we belong
+  }
+  if (at < 0) {
+    // No earlier section: after the title block, or at the first label when there is one.
+    if (!seenLabel) return trimBack(lines, lines.length);
+    for (let i = 0; i < lines.length; i++) {
+      if (!isInsertLine(lines[i]!) && sectionIdOfLine(lineText(lines[i]!)) !== undefined) return i;
+    }
+  }
+  // After that section's last non-blank line.
+  let end = at + 1;
+  for (let i = at + 1; i < lines.length; i++) {
+    if (isInsertLine(lines[i]!)) continue;
+    if (sectionIdOfLine(lineText(lines[i]!)) !== undefined) break;
+    end = i + 1;
+  }
+  return trimBack(lines, end);
+}
+
+/** Walk back over trailing blank lines so a created section lands against the text above it. */
+function trimBack(lines: Line[], end: number): number {
+  let at = end;
+  while (at > 0 && lineText(lines[at - 1]!) === "") at--;
+  return at;
+}
+
 export type Located = { start: number; count: number } | null;
 
 /** Find the hunk's old lines (or its insertion point) as a line range; `null` ⇒ conflict. */
 export function locateHunk(lines: Line[], section: SectionId | null, hunk: Hunk, from = 0): Located {
   const range = sectionRange(lines, section);
-  if (range.start < 0) return null;
+  // The section is not in the report: this proposal creates it (its hunk carries the label line).
+  if (range.start < 0) return section === null ? null : { start: sectionInsertionPoint(lines, section), count: 0 };
   const lo = Math.max(range.start, from);
   const matchable = (i: number) => !isInsertLine(lines[i]!);
   if (hunk.oldLines.length > 0) {

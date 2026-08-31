@@ -6,9 +6,10 @@
  * always sees what the radiologist sees.
  */
 import type { Op } from "quill-delta";
+import { HOUSE_PROFILE, type SectionProfile } from "./labels.ts";
 import { deltaToMarkdown } from "./markdown.ts";
 import { buildManifest, isWritable, resolvePath } from "./namespace.ts";
-import { RAD_ERRORS, type RadErrorCode, type ReportStatus, type SectionId } from "./schema.ts";
+import { RAD_ERRORS, SECTION_IDS, type RadErrorCode, type ReportStatus } from "./schema.ts";
 import { splitSections } from "./sections.ts";
 
 export class RadError extends Error {
@@ -39,11 +40,13 @@ export type ReportStoreDeps = {
   snippets?: Record<string, string>;
   /** Live report status; `final` locks every write (design 02 §5.2). Absent ⇒ never locked. */
   reportStatus?: () => ReportStatus;
+  /** The section vocabulary this case is written in (design 06 §4). Absent ⇒ the house profile. */
+  profile?: SectionProfile;
 };
 
 export type ReportStore = {
   accession: string;
-  /** Canonical content at `path`; throws `RadError` (-32004 / -32003). */
+  /** Canonical content at `path`; `""` for an absent section; throws `RadError` (-32004 / -32003). */
   read: (path: string) => string;
   /**
    * Validate a write target: throws `-32004` outside the namespace and `-32003` on read-only
@@ -59,6 +62,7 @@ export type ReportStore = {
 };
 
 export function createReportStore(deps: ReportStoreDeps): ReportStore {
+  const profile = deps.profile ?? HOUSE_PROFILE;
   const priors = deps.priors ?? {};
   const templates = deps.templates ?? {};
   const snippets = deps.snippets ?? {};
@@ -72,11 +76,8 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
     switch (r.kind) {
       case "report":
         return reportMarkdown();
-      case "section": {
-        const s = splitSections(reportMarkdown()).sections[r.id];
-        if (s === undefined) throw notFound(path);
-        return s;
-      }
+      case "section":
+        return splitSections(reportMarkdown(), profile).sections[r.id] ?? "";
       case "meta":
         return `${JSON.stringify(deps.meta, null, 2)}\n`;
       case "priorsIndex": {
@@ -106,7 +107,9 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
 
   const manifest = () =>
     buildManifest(deps.accession, {
-      sections: Object.keys(splitSections(reportMarkdown()).sections) as SectionId[],
+      // Every canonical section, present or not: a listing that outlives the state it described
+      // is a trap (design 06 §6). An absent section reads as "" and is created on write.
+      sections: SECTION_IDS,
       priors: Object.keys(priors),
       templates: Object.keys(templates),
       snippets: Object.keys(snippets),

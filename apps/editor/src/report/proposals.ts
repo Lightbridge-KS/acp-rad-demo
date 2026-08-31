@@ -11,7 +11,7 @@
  * per-hunk decisions but no agent is waiting — no permission answer, no grant, never cancelled
  * by the agent's turn ending, and `accept_edit` is plain `accept` (house text is not AI text).
  */
-import { applyHunks, buildHunks, canonicalize, resolvePath, type Hunk, type SectionId } from "acp-rad";
+import { applyHunks, buildHunks, canonicalLabel, canonicalize, resolvePath, type Hunk, type ResolvedPath, type SectionId } from "acp-rad";
 
 export type Verb = "accept" | "accept_edit" | "reject";
 export type HunkState = "pending" | "conflict" | Verb;
@@ -119,7 +119,7 @@ export class ProposalStore {
     const r = resolvePath(diff.path, this.accession);
     if (!r || (r.kind !== "section" && r.kind !== "report")) return null;
     const oldText = diff.oldText ?? "";
-    const hunks = buildHunks(oldText, diff.newText, `${this.nextPrefix()}`);
+    const hunks = buildHunks(oldText, withLabel(r, currentFile, diff.newText), `${this.nextPrefix()}`);
     return this.add(toolCallId, diff.path, r.kind === "section" ? r.id : null, hunks, currentFile);
   }
 
@@ -127,7 +127,7 @@ export class ProposalStore {
   fromWrite(toolCallId: string, path: string, content: string, currentFile: string): Proposal | null {
     const r = resolvePath(path, this.accession);
     if (!r || (r.kind !== "section" && r.kind !== "report")) return null;
-    const hunks = buildHunks(currentFile, content, `${this.nextPrefix()}`);
+    const hunks = buildHunks(currentFile, withLabel(r, currentFile, content), `${this.nextPrefix()}`);
     return this.add(toolCallId, path, r.kind === "section" ? r.id : null, hunks, currentFile);
   }
 
@@ -289,6 +289,17 @@ export class ProposalStore {
   private emit(e: ProposalEvent): void {
     for (const fn of this.listeners) fn(e);
   }
+}
+
+/**
+ * An empty base for a section means the section is absent from the report (a present one always
+ * carries at least its own label line). The agent writes only the content; the Client — which owns
+ * the canonical grammar — supplies the label, so creating a section is one visible, decidable
+ * change rather than a silent write (design 06 §6).
+ */
+function withLabel(r: ResolvedPath, currentFile: string, content: string): string {
+  if (r.kind !== "section" || currentFile !== "" || content === "") return content;
+  return `${canonicalLabel(r.id)}\n${content}`;
 }
 
 /**
