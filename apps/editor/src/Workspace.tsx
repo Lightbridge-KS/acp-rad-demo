@@ -46,6 +46,8 @@ export type WorkspaceHandle = {
 type Props = {
   fixture: CaseFixture;
   role: Role;
+  /** Whose personal skill layer is mounted at `/skills/personal/`; `undefined` mounts none. */
+  persona?: string | undefined;
   ref?: Ref<WorkspaceHandle>;
   /** Shell controls rendered at the head of the header (worklist, role). */
   headerStart?: ReactNode;
@@ -62,7 +64,7 @@ const SKIP_TEXT: Record<SkipReason, string> = {
   error: "the agent failed",
 };
 
-export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
+export function Workspace({ fixture, role, persona, ref, headerStart, banner }: Props) {
   const [state, dispatch] = useReducer(sidebarReducer, initialSidebarState);
   const [header, setHeader] = useState<HeaderState>({ status: "disconnected" });
   const [quill, setQuill] = useState<Quill | null>(null);
@@ -107,7 +109,7 @@ export function Workspace({ fixture, role, ref, headerStart, banner }: Props) {
   const flags = useMemo(() => new FlagStore(), [fixture]);
   const audit = useMemo(() => new AuditLog(), [fixture]);
   // One ReportStore for the agent (fs/*) and the editor commands: live Quill, overlays stripped.
-  const store = useMemo(() => (quill ? makeReportStore(quill, fixture, () => statusRef.current) : null), [quill, fixture]);
+  const store = useMemo(() => (quill ? makeReportStore(quill, fixture, () => statusRef.current, persona) : null), [quill, fixture, persona]);
 
   // The role is display-only (02 §5.2) except for the audit stamp.
   useEffect(() => audit.setActor({ userId: `demo-${role}`, role }), [audit, role]);

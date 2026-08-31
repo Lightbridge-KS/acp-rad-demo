@@ -5,7 +5,7 @@ read_when: Starting any session on this repo; before planning a slice; when land
 
 # ACP-Rad Demo — progress
 
-Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · [`04-skills`](../design/04-skills.md) · [`05-data-architecture`](../design/05-data-architecture.md) · [`06-report-parsing`](../design/06-report-parsing.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Sub-trackers: [`report-parsing`](./report-parsing.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
+Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-surface-architecture`](../design/02-surface-architecture.md) · [`03-agentic-architecture`](../design/03-agentic-architecture.md) · [`04-skills`](../design/04-skills.md) · [`05-data-architecture`](../design/05-data-architecture.md) · [`06-report-parsing`](../design/06-report-parsing.md) · glossary [`CONTEXT.md`](../../CONTEXT.md). Sub-trackers: [`report-parsing`](./report-parsing.md) · [`skills-layered`](./skills-layered.md). Original draft (build order, 2026-08-29 decision ledger): [`archive/design/acp-rad-poc-spec.md`](../archive/design/acp-rad-poc-spec.md).
 
 ## Milestones
 
@@ -52,7 +52,7 @@ Design: [`01-system-architecture`](../design/01-system-architecture.md) · [`02-
 ## Now / Next
 
 - **Now:** the anonymous public demo is live at `https://acp-rad-demo-editor.vercel.app` and verified by the production smoke. Outstanding before wider sharing: KS reviews the four synthetic cases for clinical plausibility.
-- **Next:** report parsing — tolerant section labels, then absent sections and `/normalize` ([`report-parsing.md`](./report-parsing.md)). Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run remain **deferred with no schedule** (KS, 2026-08-30).
+- **Next:** layered skills — skills become Agent-Skills folders resolved across builtin → house → personal, mentioned in-sentence, and recorded in the audit trail ([`skills-layered.md`](./skills-layered.md), plan approved 2026-08-31). Slice 7 (Level 0 in the demo) and the Zed-against-`rad-agent` run remain **deferred with no schedule** (KS, 2026-08-30).
 
 ## Deferred
 

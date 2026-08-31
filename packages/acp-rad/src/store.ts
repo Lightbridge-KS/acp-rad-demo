@@ -8,7 +8,7 @@
 import type { Op } from "quill-delta";
 import { HOUSE_PROFILE, type SectionProfile } from "./labels.ts";
 import { deltaToMarkdown } from "./markdown.ts";
-import { buildManifest, isWritable, resolvePath } from "./namespace.ts";
+import { buildManifest, isWritable, resolvePath, skillKey } from "./namespace.ts";
 import { RAD_ERRORS, SECTION_IDS, type RadErrorCode, type ReportStatus } from "./schema.ts";
 import { splitSections } from "./sections.ts";
 
@@ -38,6 +38,12 @@ export type ReportStoreDeps = {
   templates?: Record<string, string>;
   /** Quick-text snippets by id, canonical Markdown. */
   snippets?: Record<string, string>;
+  /**
+   * Skill files the Client serves, keyed `{layer}/{name}/{file}` — e.g.
+   * `house/proofread/SKILL.md`. The only subtree whose content is instructions (INV-3);
+   * read-only like every other reference path. The agent's `builtin` layer is not here.
+   */
+  skills?: Record<string, string>;
   /** Live report status; `final` locks every write (design 02 §5.2). Absent ⇒ never locked. */
   reportStatus?: () => ReportStatus;
   /** The section vocabulary this case is written in (design 06 §4). Absent ⇒ the house profile. */
@@ -66,6 +72,7 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
   const priors = deps.priors ?? {};
   const templates = deps.templates ?? {};
   const snippets = deps.snippets ?? {};
+  const skills = deps.skills ?? {};
   const notFound = (path: string) => new RadError(RAD_ERRORS.NOT_FOUND, `not found: ${path}`);
 
   const reportMarkdown = () => deltaToMarkdown(deps.getOps());
@@ -93,6 +100,8 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
         return templates[r.id] ?? throwNotFound(path);
       case "snippet":
         return snippets[r.id] ?? throwNotFound(path);
+      case "skill":
+        return skills[skillKey(r)] ?? throwNotFound(path);
     }
   };
 
@@ -113,6 +122,7 @@ export function createReportStore(deps: ReportStoreDeps): ReportStore {
       priors: Object.keys(priors),
       templates: Object.keys(templates),
       snippets: Object.keys(snippets),
+      skills: Object.keys(skills),
     });
 
   return { accession: deps.accession, read, assertWritable, reportMarkdown, manifest, reportStatus };

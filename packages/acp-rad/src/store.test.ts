@@ -44,6 +44,17 @@ describe("namespace", () => {
     ["/etc/passwd", null],
     ["worklist/ACC0000001/report.md", null],
     ["/worklist/ACC0000001/../x/report.md", null],
+    // Skills (INV-3): only the Client's two layers; `builtin` ships with the agent, not here.
+    ["/skills/house/qa/SKILL.md", { kind: "skill", layer: "house", name: "qa", file: "SKILL.md" }],
+    ["/skills/personal/impression/SKILL.md", { kind: "skill", layer: "personal", name: "impression", file: "SKILL.md" }],
+    ["/skills/house/ct-brain-er/references/guide.md", { kind: "skill", layer: "house", name: "ct-brain-er", file: "references/guide.md" }],
+    ["/skills/builtin/qa/SKILL.md", null],
+    ["/skills/house/qa/skill.md", null],
+    ["/skills/house/qa/notes.md", null],
+    ["/skills/house/qa/references/../../../etc/passwd", null],
+    ["/skills/house/-bad/SKILL.md", null],
+    ["/skills/house/under_score/SKILL.md", null],
+    ["/skills/house/SKILL.md", null],
   ])("%s", (path, expected) => {
     expect(resolvePath(path, acc)).toEqual(expected);
   });
@@ -52,13 +63,27 @@ describe("namespace", () => {
     expect(isWritable({ kind: "section", id: "impression" })).toBe(true);
     expect(isWritable({ kind: "template", id: "x" })).toBe(false);
     expect(isWritable({ kind: "meta" })).toBe(false);
+    // A skill is instructions, and instructions are never writable — not even by the proposal flow.
+    expect(isWritable({ kind: "skill", layer: "house", name: "qa", file: "SKILL.md" })).toBe(false);
   });
   it("builds a sorted, de-duplicated manifest", () => {
-    const m = buildManifest(acc, { sections: ["findings", "impression"], priors: [], templates: ["cxr-pa"], snippets: ["sp-brain"] });
+    const m = buildManifest(acc, {
+      sections: ["findings", "impression"],
+      priors: [],
+      templates: ["cxr-pa"],
+      snippets: ["sp-brain"],
+      skills: ["house/qa/SKILL.md", "personal/impression/SKILL.md"],
+    });
     expect(m).toEqual([...m].sort());
     expect(m).toContain("/worklist/ACC0000001/sections/findings.md");
     expect(m).toContain("/priors/index.md");
     expect(m).toContain("/templates/cxr-pa.md");
+    expect(m).toContain("/skills/house/qa/SKILL.md");
+    expect(m).toContain("/skills/personal/impression/SKILL.md");
+  });
+  it("skills are optional in the manifest — a client that serves none lists none", () => {
+    const m = buildManifest(acc, { sections: [], priors: [], templates: [], snippets: [] });
+    expect(m.some((p) => p.startsWith("/skills/"))).toBe(false);
   });
 });
 
@@ -187,5 +212,48 @@ describe("priors index", () => {
     expect(store.manifest()).toContain("/priors/ACC2/report.md");
     const generated = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n"), meta: {}, priors: { ACC2: "**T**\n" } });
     expect(generated.read("/priors/index.md")).toBe("- /priors/ACC2/report.md\n");
+  });
+});
+
+describe("skills (INV-3: the only subtree that is instructions)", () => {
+  const skills = {
+    "house/qa/SKILL.md": "---\nname: qa\ndescription: house checks\n---\nAlso check the prelim marker.\n",
+    "personal/impression/SKILL.md": "---\nname: impression\ndescription: dr A\n---\nEnd with a recommendation.\n",
+    "house/ct-brain-er/references/guide.md": "# Reporting guide\n",
+  };
+  const store = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n"), meta: {}, skills });
+
+  it("serves each layer's SKILL.md and its reference material", () => {
+    expect(store.read("/skills/house/qa/SKILL.md")).toMatch(/^---\nname: qa/);
+    expect(store.read("/skills/personal/impression/SKILL.md")).toMatch(/recommendation/);
+    expect(store.read("/skills/house/ct-brain-er/references/guide.md")).toBe("# Reporting guide\n");
+  });
+
+  it("lists every skill file in the manifest, so ls and glob can find them", () => {
+    const m = store.manifest();
+    expect(m).toContain("/skills/house/qa/SKILL.md");
+    expect(m).toContain("/skills/personal/impression/SKILL.md");
+    expect(m).toContain("/skills/house/ct-brain-er/references/guide.md");
+  });
+
+  it("is read-only: -32003 on write, even though the report itself is writable", () => {
+    expect(() => store.assertWritable("/skills/house/qa/SKILL.md")).toThrow(RadError);
+    try {
+      store.assertWritable("/skills/house/qa/SKILL.md");
+    } catch (e) {
+      expect((e as RadError).code).toBe(RAD_ERRORS.FORBIDDEN);
+    }
+  });
+
+  it("-32004 for a skill that is not served, and for the agent's own builtin layer", () => {
+    for (const p of ["/skills/house/missing/SKILL.md", "/skills/personal/qa/SKILL.md", "/skills/builtin/qa/SKILL.md"]) {
+      expect(() => store.read(p)).toThrow(RadError);
+    }
+  });
+
+  it("a client that serves no skills is unchanged — no paths, no manifest entries", () => {
+    const bare = createReportStore({ accession: "ACC1", getOps: () => markdownToDelta("**T**\n"), meta: {} });
+    expect(bare.manifest().some((p) => p.startsWith("/skills/"))).toBe(false);
+    expect(() => bare.read("/skills/house/qa/SKILL.md")).toThrow(RadError);
   });
 });

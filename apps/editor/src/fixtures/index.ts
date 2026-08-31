@@ -62,6 +62,52 @@ function collection(dir: "templates" | "snippets"): Record<string, string> {
 export const templates: Record<string, string> = collection("templates");
 export const snippets: Record<string, string> = collection("snippets");
 
+// ---------------------------------------------------------------------------
+// Skills (Agent Skills spec: `<name>/SKILL.md`, agentskills.io)
+// ---------------------------------------------------------------------------
+//
+// Nested, so `collection()`/`idOf` cannot serve them — those flatten a path to its basename and
+// every `SKILL.md` would collide on one key. Keys here keep the path inside the layer
+// (`qa/SKILL.md`, `impression/references/guide.md`), which is what the namespace addresses.
+//
+// The `builtin` layer is absent by design: it ships with the agent, not the client.
+
+const HOUSE_RE = /^\.\.\/\.\.\/fixtures\/skills\/house\/(.+)$/;
+const PERSONAL_RE = /^\.\.\/\.\.\/fixtures\/skills\/personal\/([^/]+)\/(.+)$/;
+
+/** House-authored skills, keyed `{name}/{file}`. */
+export const houseSkills: Record<string, string> = Object.fromEntries(
+  Object.entries(md)
+    .map(([p, text]) => [HOUSE_RE.exec(p)?.[1], text] as const)
+    .filter((e): e is readonly [string, string] => e[0] !== undefined),
+);
+
+/** Personal skills by persona (`dr-a`, …), each keyed `{name}/{file}`. */
+export const personalSkills: Record<string, Record<string, string>> = (() => {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [p, text] of Object.entries(md)) {
+    const m = PERSONAL_RE.exec(p);
+    if (!m) continue;
+    (out[m[1]!] ??= {})[m[2]!] = text;
+  }
+  return out;
+})();
+
+/** Persona ids that own a personal skill layer, sorted. `?radiologist=` selects one. */
+export const personas: string[] = Object.keys(personalSkills).sort();
+
+/**
+ * The skill files the Client serves for one radiologist, keyed the way `ReportStoreDeps.skills`
+ * addresses them (`{layer}/{name}/{file}`). Only the *active* persona is mounted, at
+ * `/skills/personal/…` — the agent never sees that personas exist, only that a personal layer does.
+ */
+export function skillFiles(persona: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, text] of Object.entries(houseSkills)) out[`house/${key}`] = text;
+  for (const [key, text] of Object.entries((persona && personalSkills[persona]) ?? {})) out[`personal/${key}`] = text;
+  return out;
+}
+
 export const cases: CaseFixture[] = Object.entries(metas)
   .map(([path, meta]) => {
     const id = path.replace(/^\.\.\/\.\.\/fixtures\/([^/]+)\/meta\.json$/, "$1");
