@@ -241,7 +241,7 @@ The agent's `raise_flag(kind, summary, locations)` tool (`flags.py`, pydantic `L
 
 | Proposal item | PoC decision |
 |---|---|
-| Virtual namespace (§4) | `/worklist/{acc}/{report.md, sections/{id}.md, meta.json}` RW*, `/priors/**`, `/templates/**`, `/snippets/**` RO. RW* = only via the proposal flow. `session/new._meta.rad.manifest` lists every readable path (v1 has no `ls`). Absent section ⇒ absent file ⇒ `-32004`. |
+| Virtual namespace (§4) | `/worklist/{acc}/{report.md, sections/{id}.md, meta.json}` RW*, `/priors/**`, `/templates/**`, `/snippets/**` RO. RW* = only via the proposal flow. `session/new._meta.rad.manifest` lists every readable path (v1 has no `ls`) and is *static* — always the five sections, so it cannot go stale. An absent section reads as `""` and is created, with its label, through the proposal flow (design 06 §6). |
 | Canonical Markdown (§4.2) | **house label-line grammar**, not H2 headings: `**LABEL:** text` lines, `**Organ:** text` inside FINDINGS, `- ` impression items, blank line only before top-level labels, no headings. Sections `history · technique · comparison · findings · impression`; the title line precedes the first label (RO). Literal `*`/`_` are not escaped (`___` blanks, `E_V_M_` stay literal). |
 | Session binding (§5) | `_meta.rad` on `session/new`: `accession, modality, region, protocol, setting, reportStatus, phiBoundary, manifest`. **`reportStatus ∈ {draft, preliminary, final}` + `shortPrelim: boolean`** (2026-08-30; replaces the 4-state enum). |
 | Levels (§3) | inferred from `initialize.result._meta.rad`; absent ⇒ Level 0. Client supports all three at once. |

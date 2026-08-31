@@ -97,7 +97,7 @@ Rules: the composer's `/` lists skills only — the chat box is the agent's chan
 | Path | Access | Content |
 |---|---|---|
 | `/worklist/{acc}/report.md` | RW* | whole report, canonical Markdown |
-| `/worklist/{acc}/sections/{history\|technique\|comparison\|findings\|impression}.md` | RW* | one section; absent section ⇒ `-32004` |
+| `/worklist/{acc}/sections/{history\|technique\|comparison\|findings\|impression}.md` | RW* | one section; an absent one reads as `""` and is created on write (design 06 §6) |
 | `/worklist/{acc}/meta.json` | RO | de-identified study metadata (modality, region, protocol, sex, dose, template id) |
 | `/priors/index.md` · `/priors/{acc}/report.md` | RO | prior reports |
 | `/templates/{id}.md` · `/snippets/{id}.md` | RO | house templates, quick text |

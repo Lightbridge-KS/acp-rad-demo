@@ -214,7 +214,7 @@ Client side: options of kind `allow_always` / `reject_always` are filtered out (
 { "content": "**FINDINGS:**\n**Cerebral parenchyma:** …\n" }
 ```
 
-`line` is 1-based, `limit` counts lines (`sliceLines`). While a grant is open for `path` the client serves the proposal's **base text** rather than the live buffer (design 01 §6.1). Errors: `-32004` outside the namespace or absent section.
+`line` is 1-based, `limit` counts lines (`sliceLines`). While a grant is open for `path` the client serves the proposal's **base text** rather than the live buffer (design 01 §6.1). Errors: `-32004` outside the namespace. An **absent section reads as `""`**, not an error (design 06 §6).
 
 ### 5.9 `fs/write_text_file`
 
@@ -266,7 +266,7 @@ Sent with `conn.agent.notify(AUDIT_METHOD, record)` on the same connection; the 
 |---|---|---|
 | `-32601` | method not found | the agent's unimplemented optional methods (`authenticate`, `session/load`, …); an unknown `_rad/*` (`ext_method`) |
 | `-32003` | forbidden — read-only path, `final` report | `ReportStore.assertWritable`, `connection.ts` |
-| `-32004` | not found — path outside the namespace, absent section, unknown prior/template/snippet | `ReportStore.read` / `assertWritable` |
+| `-32004` | not found — path outside the namespace, unknown prior/template/snippet | `ReportStore.read` / `assertWritable` |
 | `-32010` | proposal rejected by the radiologist | unsolicited-write path when every hunk is rejected |
 | `-32011` | canonicalization conflict | **declared, never raised** — an unfindable anchor becomes a hunk `conflict` and the write lands `partial` |
 

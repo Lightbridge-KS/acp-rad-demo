@@ -131,7 +131,7 @@ One document, two representations, converted deterministically by `packages/acp-
 - **Quill Delta** (`Op[]`) — the buffer. Blocks: paragraph, `list: bullet`, `list: ordered`. Inline: `bold`, `italic`. Overlay attributes ride on the same ops and are *never* canonical: `ai-insert` / `ai-delete` (value = hunk id), `ai-unreviewed` (value = proposal id). `ReportEditor.tsx` whitelists formats (`REPORT_FORMATS`) and sets `history: { userOnly: true }`, so only the radiologist's own ops are undoable.
 - **Canonical Markdown** — the serialization both peers read. One Quill line ⇄ one Markdown line; `**bold**`, `_italic_`, `- ` bullet, `1. ` ordered; CRLF → LF, trailing whitespace stripped, blank runs collapsed, no leading/trailing blank line, single trailing LF. `**` opens bold only before a non-space and `_` is a marker only at a word boundary, so house literals survive (`___` blanks, `E_V_M_`, `** This is a PRELIMINARY …`). Fixed point: `deltaToMarkdown(markdownToDelta(md))` is stable after one pass — this determinism is what makes agent diffs apply.
 
-The **section partition** (`sections.ts`) is computed, never stored: a line matching `**HISTORY:**` · `**TECHNIQUE(S):**` · `**COMPARISON:**` · `**FINDINGS:**` · `**IMPRESSION:**` opens a section that runs to the next label; lines before the first label are the title (read-only); the header block (contrast, complication, dose, phases) belongs to `technique`. Absent section ⇒ absent file ⇒ `-32004`.
+The **section partition** (`sections.ts` over `labels.ts`) is computed, never stored: a line the section profile recognizes as a label — tolerantly, so `**IMPRESSION:**`, `**IMPRESSION**:` and a bare `**IMPRESSION**` all count — opens a section that runs to the next label or to a footer line; lines before the first label are the title (read-only); the header block (contrast, complication, dose, phases) belongs to `technique`. An absent section reads as `""` and is created on write. The rule and its accept/reject battery live in **[Report Parsing](./06-report-parsing.md)**.
 
 ```text
 **EMERGENCY MDCT OF THE BRAIN**                         ← title (RO)
@@ -164,7 +164,7 @@ The findings about ___ … discussed with Dr.____ …       ← discussed-with l
 | `/templates/{id}.md` | RO | build-time `templates` collection | house template |
 | `/snippets/{id}.md` | RO | build-time `snippets` collection | snippet text |
 
-RW\* = writable only through the proposal flow (§4). `{acc}` must equal the session's accession, otherwise `-32004`. The **manifest** (`buildManifest`) is the sorted, de-duplicated list of every readable path, sent once at `session/new`; the agent answers `ls`/`glob` from it because ACP v1 has no directory listing. Worked example from the audit trail: `ACC0000012` opens with `manifest=21` = `report.md` + `meta.json` + 5 sections + `priors/index.md` + 2 priors + 5 templates + 6 snippets.
+RW\* = writable only through the proposal flow (§4). `{acc}` must equal the session's accession, otherwise `-32004`. The **manifest** (`buildManifest`) is the sorted, de-duplicated list of every readable path, sent once at `session/new`; the agent answers `ls`/`glob` from it because ACP v1 has no directory listing. It is built only from fixture-constant inputs — the five sections are always listed, present or not — so a listing sent at connect stays true for the session (design 06 §6). Worked example from the audit trail: `ACC0000012` opens with `manifest=21` = `report.md` + `meta.json` + 5 sections + `priors/index.md` + 2 priors + 5 templates + 6 snippets.
 
 ### 3.5 Fixtures on disk
 

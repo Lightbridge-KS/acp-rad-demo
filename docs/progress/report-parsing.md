@@ -11,18 +11,17 @@ Steps are **P1–P4**, not "slices" — the parent tracker's slice numbers mean 
 
 ## Milestones
 
-- [ ] **P1. Tolerant, line-anchored section labels** — new `packages/acp-rad/src/labels.ts` (`SectionProfile`, `HOUSE_PROFILE` ported from `radreportparser`'s `KeyWord`, `sectionIdOfLine`, `isFooterLine`, `canonicalLabel`, `normalizeLabels`); `sections.ts` drops `SECTION_LABEL_RE`/`LABEL_TO_ID` and closes a section at a footer line; new fixture `ct-neck-tb-lymph` (the report that broke, synthetic). All three call sites import from the package root and need no edit.
-- [ ] **P2. The section profile as configuration** — `ReportStoreDeps.profile?`, threaded into every `splitSections`; a per-case override in `fixtures/index.ts`.
-- [ ] **P3. Absent sections, static manifest, `/normalize`** —
-  - [ ] P3a: `read` of an absent section returns `""`; `manifest()` always lists the five `SECTION_IDS` (so it cannot go stale); `proposals` prefixes `canonicalLabel(id)` when the base is `""`; `overlay.sectionInsertionPoint()` places a materialized section by `SECTION_IDS` order; `smoke.ts` guarded against `replace("")`.
-  - [ ] P3b: `/normalize` — `runEditorCommand` returns a `replace` effect from `normalizeLabels`, which the existing local-proposal path (`apply.ts`) renders as tracked changes. Never on paste, never silent.
-- [ ] **P3c. Contract docs synced** — *absent section ⇒ `""`* replaces *⇒ `-32004`* in design 01 §8, 02 §4, 05 §3.3, protocol §5.4/§6, and this repo's parent tracker; `CONTEXT.md` gains **Section profile** and extends **Label line**; README + AGENTS doc lists.
-- [ ] **P4. (deferred) Standalone TS package** — extract once the profile has survived a real corpus and a second consumer. The artifact to share with the Python package is the **profile + conformance corpus**, not the engine (design 06 §7). Also file the two upstream defects found while porting.
+- [x] **P1. Tolerant, line-anchored section labels** (2026-08-31, `f59a1d1`) — new `packages/acp-rad/src/labels.ts` owns the whole grammar: `SectionProfile` + `HOUSE_PROFILE` (ported from `radreportparser`'s `KeyWord`), `sectionIdOfLine`, `isFooterLine`, `canonicalLabel`, `normalizeLabels`. `sections.ts` drops `SECTION_LABEL_RE`/`LABEL_TO_ID` and closes a section at a RIS footer. New fixture `ct-neck-tb-lymph` (`ACC0000040`) — the report that broke, synthetic. Verified: 66 new tests; the fixture sweep proves the tolerant recognizer yields the *identical* label set as the strict one on all 20 pre-existing fixture files; `just check` green.
+- [x] **P2. The section profile as configuration** (2026-08-31, `e290a57`) — `ReportStoreDeps.profile?`, threaded into every `splitSections`. Verified: a custom profile parses `DESCRIPTION:`/`CONCLUSION:` and does not leak into `HOUSE_PROFILE`.
+- [x] **P3a. Absent sections, static manifest** (2026-08-31, `e290a57`) — `read` of an absent section returns `""`; `manifest()` always lists the five `SECTION_IDS`; `proposals` prefixes `canonicalLabel(id)` when the base is `""`; `overlay.sectionInsertionPoint()` places a created section in `SECTION_IDS` order; `smoke.ts` guarded against `replace("")`. Verified: `just check` green (164 + 10 + 117 TS, 47 py).
+- [x] **P3b. `/normalize`** (2026-08-31, `2b8a809`) — a `replace` effect from `normalizeLabels` through the existing local-proposal path, so the rewrite is tracked changes the radiologist decides. Suggested only when the buffer holds a foreign label. Verified: `just check` green.
+- [x] **P3c. Contract docs synced** (2026-08-31, `66968ea` + this commit) — *absent section ⇒ `""`* replaces *⇒ `-32004`* in design 01 §8, 02 §4, 05 §3.3/§4, protocol §5.4/§6 and the parent tracker's slice-2 contract; `CONTEXT.md` gained **Section profile** and an extended **Label line**; README + AGENTS doc lists.
+- [ ] **P4. (deferred) Standalone TS package** — extract once the profile has survived a real corpus and a second consumer. The artifact to share with the Python package is the **profile + conformance corpus**, not the engine (design 06 §7). Also file the two upstream defects found while porting: mid-prose false positives, and `verbose=True` printing to stdout.
 
 ## Now / Next
 
-- **Now:** P1 — the design doc is written; `labels.ts` is next.
-- **Next:** P2, then P3a/P3b in that order (P3b depends on `normalizeLabels` from P1 and nothing else).
+- **Now:** P1–P3 landed; the dry gates are green. Outstanding: the browser run — paste a non-template report, `/impression`, then `/normalize` — and a `just smoke` pass.
+- **Next:** nothing scheduled. P4 (the standalone package) is deferred with no date.
 
 ## Deferred
 
@@ -32,7 +31,12 @@ Steps are **P1–P4**, not "slices" — the parent tracker's slice numbers mean 
 
 ## Confirmed contracts
 
-- (none yet — filled as steps land)
+- **A label is anchored and terminated.** It must open its line, and after the keyword the line must hold a colon or end. Anchoring is what keeps the partition line-indexed; the terminator is what stops prose (`Findings are consistent with…`, `Comparison with the prior…`) from opening a section. Dropping either re-creates the Python package's mid-prose false positives — proven, design 06 §5.
+- **`""` means absent, unambiguously.** A section that is present always carries at least its own label line, so an empty read can only mean the section is missing. Both halves must move together: if `read` returns `""` while `manifest()` still omits the path, the listing lies in the other direction.
+- **The manifest is static or it is stale.** It is sent once at `session/new` and never refreshed, so every input must be fixture-constant. Listing all five sections regardless of presence is what makes that true — the same class of bug as the agent-side `reportStatus` snapshot (data 05 §8).
+- **The Client supplies the label, the agent supplies the content.** A created section's label is prefixed by `proposals`, never by the agent, and appears in the tracked-change diff — so creating a section is decided, not assumed (INV-1).
+- **`normalizeLabels` keeps the author's keyword.** The house writes both `**TECHNIQUE:**` and `**TECHNIQUES:**`; normalizing fixes the wrapper only. `canonicalLabel` picks a spelling *only* when creating a section from nothing.
+- **Tolerance must be additive.** The fixture sweep in `labels.test.ts` compares the recognizer against the strict regex on every fixture but the deliberately foreign one; a widening that changes any existing partition fails it.
 
 ## Open questions
 
