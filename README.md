@@ -1,6 +1,5 @@
 # ACP-Rad Demo <img src="docs/assets/radreportagent-hex-320.png" align="right" height="139" alt="RadReportAgent, the owl mascot of the demo agent" />
 
----
 
 A radiology report editor with an AI agent in the sidebar, connected through the
 **[Agent Client Protocol (ACP)](https://agentclientprotocol.com)** and a small radiology
