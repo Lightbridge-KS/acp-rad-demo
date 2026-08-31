@@ -43,6 +43,25 @@ const collection = (dir: string) =>
       .map((f) => [f.replace(/\.md$/, ""), read(`${dir}/${f}`)]),
   );
 
+/**
+ * The skill layers this client serves, keyed the way `ReportStoreDeps.skills` addresses them
+ * (`{layer}/{name}/{file}`). Only the named persona is mounted, at `personal/…` — the agent sees
+ * that a personal layer exists, never whose it is.
+ */
+const skillFiles = (persona: string): Record<string, string> => {
+  const out: Record<string, string> = {};
+  const walk = (abs: string, key: string) => {
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(path.join(abs, e.name), `${key}${e.name}/`);
+      else if (e.name.endsWith(".md")) out[`${key}${e.name}`] = readFileSync(path.join(abs, e.name), "utf8");
+    }
+  };
+  walk(path.join(FX, "skills/house"), "house/");
+  walk(path.join(FX, "skills/personal", persona), "personal/");
+  return out;
+};
+const SMOKE_PERSONA = "dr-b";
+
 /** One case's live buffer + store, the way the editor holds them. */
 function caseStore(caseId: string, accession: string, start: (md: string) => string = (md) => md) {
   let ops: Op[] = markdownToDelta(start(read(`${caseId}/report.md`)));
@@ -65,6 +84,7 @@ function caseStore(caseId: string, accession: string, start: (md: string) => str
     ...(priorsIndex !== undefined ? { priorsIndex } : {}),
     templates: collection("templates"),
     snippets: collection("snippets"),
+    skills: skillFiles(SMOKE_PERSONA),
   });
   return { store, setOps: (next: Op[]) => (ops = next) };
 }
@@ -78,6 +98,8 @@ const store = { read: (p: string) => active.store.read(p), assertWritable: (p: s
 
 const counts = { fsRead: 0, fsWrite: 0, readToolCalls: 0, editToolCalls: 0, diffs: 0, permissions: 0 };
 const offered: string[][] = [];
+/** Skill-layer paths the agent fetched — proof the client's layers crossed the wire. */
+const skillLayerReads: string[] = [];
 let advertised: string[] = [];
 let flags: { kind: string; summary: string }[] = [];
 let text = "";
@@ -117,6 +139,7 @@ const conn = acp
   })
   .onRequest(acp.methods.client.fs.readTextFile, (ctx) => {
     counts.fsRead += 1;
+    if (ctx.params.path.startsWith("/skills/")) skillLayerReads.push(ctx.params.path);
     say(`[fs/read_text_file] ${ctx.params.path}`);
     try {
       return { content: sliceLines(store.read(ctx.params.path), ctx.params.line, ctx.params.limit) };
@@ -318,6 +341,11 @@ try {
     impressionLanded: impression.includes(BULLET) && !impression.includes("- ..."),
     endTurn: r3.stopReason === "end_turn",
     skillsAdvertised: ["compare", "impression", "proofread"].every((n) => advertised.includes(n)),
+    // The house layer reaches the menu: `stroke-protocol` exists only in this client's fixtures,
+    // so the agent can only be offering it because it read and resolved a layer we served.
+    houseSkillAdvertised: advertised.includes("stroke-protocol"),
+    // …and the layers were fetched over `fs/read_text_file`, not assumed.
+    skillLayersRead: skillLayerReads.some((p) => p.startsWith("/skills/house/")) && skillLayerReads.some((p) => p.startsWith("/skills/personal/")),
     compareLanded: comparison.includes("12/06/2025") && comparison.includes("20/02/2026") && !comparison.includes("____"),
     compareEndTurn: r4.stopReason === "end_turn",
     flagsCapAdvertised: (radCaps as { flags?: boolean } | undefined)?.flags === true,
