@@ -20,8 +20,10 @@ from typing import Any, Protocol
 
 from acp.exceptions import RequestError
 from deepagents.backends.protocol import (
+    FILE_NOT_FOUND,
     BackendProtocol,
     EditResult,
+    FileDownloadResponse,
     FileInfo,
     GlobResult,
     GrepMatch,
@@ -34,6 +36,9 @@ from deepagents.backends.utils import slice_read_response
 from wcmatch import glob as wcglob
 
 log = logging.getLogger(__name__)
+
+#: The profile's "outside the namespace / no such file" code (`RAD_ERRORS.NOT_FOUND`).
+NOT_FOUND = -32004
 
 
 class _ReadResponse(Protocol):
@@ -160,25 +165,62 @@ class AcpClientBackend(BackendProtocol):
             return EditResult(error=err, path=file_path)
         return EditResult(path=file_path, occurrences=occurrences if replace_all else 1)
 
+    # -- batch download: what SkillsMiddleware calls to load SKILL.md ----------
+
+    async def adownload_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        """Fetch several files, in order.
+
+        ``SkillsMiddleware`` calls this directly and pairs the responses with its inputs by
+        index, so order matters and the list length must match. Reads are **sequential on
+        purpose**: ``_fetch`` reports failure through ``_last_error``, a per-instance side
+        channel that would race under ``asyncio.gather``.
+
+        A missing file must come back as the literal ``file_not_found`` — the only error the
+        middleware treats as "this directory is not a skill" rather than a fault worth warning
+        about. Errors are returned, never raised: an exception here would fail the whole turn.
+        """
+        out: list[FileDownloadResponse] = []
+        for path in paths:
+            content, error, missing = await self._fetch_result(path)
+            out.append(
+                FileDownloadResponse(
+                    path=path,
+                    content=None if content is None else content.encode("utf-8"),
+                    error=FILE_NOT_FOUND if missing else error,
+                )
+            )
+        return out
+
     # -- internals -------------------------------------------------------------
 
     _last_error: str = "read failed"
 
     async def _fetch(self, path: str) -> str | None:
         """Whole-file read through the client; ``None`` on error (message in ``_last_error``)."""
+        content, error, _missing = await self._fetch_result(path)
+        if content is None:
+            self._last_error = error or "read failed"
+        return content
+
+    async def _fetch_result(self, path: str) -> tuple[str | None, str | None, bool]:
+        """Whole-file read as ``(content, error, missing)`` — no shared state, so it batches safely.
+
+        ``missing`` is kept separate from ``error`` because the two callers want different
+        things from it: the file tools want the client's own message (an error that teaches the
+        model its next move), while ``adownload_files`` must report the literal
+        ``file_not_found`` the skills middleware reads as "this directory is not a skill".
+        """
         try:
             resp = await self._conn.read_text_file(session_id=self.session_id, path=path)
         except RequestError as exc:
-            self._last_error = str(exc) or f"read failed ({exc.code})"
-            return None
+            message = str(exc) or f"read failed ({exc.code})"
+            return None, message, exc.code == NOT_FOUND
         except ConnectionError as exc:
-            self._last_error = f"connection lost: {exc}"
-            return None
+            return None, f"connection lost: {exc}", False
         except Exception as exc:  # noqa: BLE001 — never raise across the tool boundary
             log.exception("fs/read_text_file failed for %s", path)
-            self._last_error = f"{type(exc).__name__}: {exc}"
-            return None
-        return resp.content
+            return None, f"{type(exc).__name__}: {exc}", False
+        return resp.content, None, False
 
     async def _put(self, path: str, content: str) -> str | None:
         """Whole-file write through the client; returns an error message or ``None``."""

@@ -1,4 +1,5 @@
 ---
-description: Draft the IMPRESSION items from the FINDINGS
+name: impression
+description: Draft the IMPRESSION items from the FINDINGS, read in the clinical context of the HISTORY. Use when the radiologist asks for an impression, a summary, or a conclusion for the current report.
 ---
 Read `sections/history.md` for the clinical context, then `sections/findings.md`. Propose the IMPRESSION as `- ` items: most important first, one finding per item, each with its laterality and the most likely diagnosis in house wording. The findings are the evidence; the history only decides between diagnoses the findings already support and how certain the wording may be. It never adds a finding, never overrides what the images show, and is never restated as an item of its own. When the findings sit oddly with the known history — new or progressive disease under treatment — say so in the item rather than assuming the known diagnosis. Edit `sections/impression.md` only, replacing the current items. Do not restate normal findings unless the study is normal, in which case a single item states that.

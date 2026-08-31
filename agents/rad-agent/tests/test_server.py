@@ -153,3 +153,46 @@ def test_rad_meta_accepts_spread_and_nested_forms() -> None:
     assert rad_meta({"rad": "not-a-dict"}) is None
     assert rad_meta({"field_meta": {"other": 1}}) is None
     assert rad_meta({}) is None
+
+
+async def test_reset_agent_routes_the_effective_skills_path(monkeypatch) -> None:
+    """With a real client connection the backend is a composite: skills are agent-side.
+
+    The Client serves its own `house`/`personal` layers as ordinary read-only paths, but the
+    *composition* of those with `builtin` has no home in the namespace — it is synthesized here
+    and mounted at `/skills/effective/`, which is the single path the model is told to read.
+    """
+    from deepagents.backends.composite import CompositeBackend
+
+    import rad_agent.server as server_mod
+    from rad_agent.skills import EFFECTIVE_ROOT, EffectiveSkillsBackend
+
+    captured: dict[str, object] = {}
+
+    def fake_build_agent(context, *, backend, accession, tools=()):
+        captured["backend"] = backend
+        return object()
+
+    class FakeConn:
+        async def read_text_file(self, session_id: str, path: str, **kwargs: object):
+            raise AssertionError("not reached")
+
+        async def session_update(self, session_id: str, update: object, **kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(server_mod, "build_agent", fake_build_agent)
+    server = _server()
+    server._conn = FakeConn()  # type: ignore[assignment]
+    manifest = ["/worklist/ACC1/report.md", "/skills/house/qa/SKILL.md"]
+    created = await server.new_session(
+        "/worklist/ACC1", mcp_servers=[], rad={"accession": "ACC1", "manifest": manifest}
+    )
+    server._reset_agent(created.session_id)
+
+    backend = captured["backend"]
+    assert isinstance(backend, CompositeBackend)
+    assert isinstance(backend.default, AcpClientBackend)
+    assert backend.default.manifest == sorted(manifest)
+    assert isinstance(backend.routes[EFFECTIVE_ROOT], EffectiveSkillsBackend)
+    # One resolution per session: the advertisement and the graph share the same instance.
+    assert backend.routes[EFFECTIVE_ROOT] is server._skills[created.session_id]
