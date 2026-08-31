@@ -15,6 +15,7 @@ import {
   RAD_ERRORS,
   RAD_META_KEY,
   RadError,
+  SKILL_LAYERS,
   effectiveSkillPath,
   levelOf,
   mentionedSkills,
@@ -93,6 +94,12 @@ export type AgentHandle = {
   setConfigOption: (configId: string, value: string) => Promise<acp.SessionConfigOption[]>;
 };
 
+/** The `model` select's current value, or `undefined` when the agent offers no such option. */
+function modelOf(options: readonly acp.SessionConfigOption[] | null | undefined): string | undefined {
+  const o = options?.find((c) => c.id === "model");
+  return o && o.type === "select" ? o.currentValue : undefined;
+}
+
 /** Run a ReportStore operation, translating profile errors to JSON-RPC errors on the wire. */
 function guarded<T>(op: () => T): T {
   try {
@@ -126,6 +133,8 @@ export async function connectAgent(
     .onNotification(acp.methods.client.session.update, (ctx) => {
       const update = ctx.params.update;
       if (update.sessionUpdate === "available_commands_update") advertised = update.availableCommands.map((c) => c.name);
+      // Keep the audit's model current: the agent may re-advertise the select at any time.
+      if (update.sessionUpdate === "config_option_update") audit.setModel(modelOf(update.configOptions));
       events.onUpdate(update);
     })
     .onRequest(acp.methods.client.fs.readTextFile, (ctx) => {
@@ -251,6 +260,9 @@ export async function connectAgent(
     { sessionId, accession: session.accession, agent: { name: agentName, version: agentVersion, level } },
     (method, record) => void conn.agent.notify(method, record),
   );
+  // The session's own select is the live truth; `initialize`'s `model` is only the default and
+  // goes stale the moment the radiologist switches.
+  audit.setModel(modelOf(created.configOptions) ?? model);
   audit.record("session.new", { outcome: `manifest=${manifest.length}` });
 
   // Level 0 hygiene (spike 1b): never inherit a registry agent's host permission mode.
@@ -274,7 +286,18 @@ export async function connectAgent(
         // A `/mention` rides as a standard ACP `resource_link` beside the radiologist's own
         // words, which are never rewritten. The link is what makes the invocation structural:
         // the agent resolves it deterministically instead of inferring intent from prose.
-        const mentions = mentionedSkills(text, advertised).map((name) => ({
+        const named = mentionedSkills(text, advertised);
+        for (const name of named) {
+          // Provenance the Client can attest: which of *its* layers back this skill, and what
+          // they said. `builtin` is pinned by `agent.version`; nothing is taken from the agent.
+          const layers = SKILL_LAYERS.filter((l) => manifest.includes(`/skills/${l}/${name}/SKILL.md`));
+          const bodies = layers.map((l) => store.read(`/skills/${l}/${name}/SKILL.md`)).join("\n");
+          audit.record("skill.mentioned", {
+            skill: name,
+            ...(layers.length ? { skillLayers: [...layers], argsHash: fingerprint(bodies) } : {}),
+          });
+        }
+        const mentions = named.map((name) => ({
           type: "resource_link" as const,
           uri: effectiveSkillPath(name),
           name,
@@ -297,7 +320,10 @@ export async function connectAgent(
     configOptions: created.configOptions ?? [],
     setConfigOption: async (configId, value) => {
       const res = await conn.agent.request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value });
+      // Record first, then adopt: the switch line then reads "was X, switching to Y" and both
+      // halves of the transition sit on one record.
       audit.record("session.config", { outcome: `${configId}=${value}` });
+      if (configId === "model") audit.setModel(value);
       return res.configOptions;
     },
   };

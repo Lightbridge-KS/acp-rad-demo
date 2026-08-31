@@ -13,7 +13,7 @@ export type AuditContext = {
 
 export type AuditActor = AuditRecord["actor"];
 export type AuditSink = (method: string, record: AuditRecord) => void;
-export type AuditFields = Partial<Pick<AuditRecord, "path" | "toolCallId" | "hunkId" | "flagId" | "flagIds" | "argsHash" | "outcome">>;
+export type AuditFields = Partial<Pick<AuditRecord, "path" | "toolCallId" | "hunkId" | "flagId" | "flagIds" | "argsHash" | "outcome" | "skill" | "skillLayers">>;
 
 const DEFAULT_ACTOR: AuditActor = { userId: "demo-radiologist", role: "radiologist" };
 
@@ -24,6 +24,12 @@ export class AuditLog {
   private sink: AuditSink | null = null;
   /** Set by the role toggle; independent of `ctx` because `bind` replaces `ctx` wholesale. */
   private actor: AuditActor | null = null;
+  /**
+   * The model in force. Its own field, not part of `ctx`: `ctx` is bound once at connect and the
+   * model can change mid-session (`session/set_config_option`), so a record stamped from `ctx`
+   * would name the model the session *started* with rather than the one that did the work.
+   */
+  private model: string | null = null;
   /** Records made before the session exists (editor commands run while connecting); flushed on `bind`. */
   private pending: Array<{ ts: string; event: string; fields: AuditFields; actor: AuditActor }> = [];
 
@@ -38,6 +44,11 @@ export class AuditLog {
   /** Who acts from now on (the role toggle); records already queued keep the actor they were made under. */
   setActor(actor: AuditActor): void {
     this.actor = actor;
+  }
+
+  /** Which model acts from now on; every subsequent record carries it. */
+  setModel(model: string | undefined): void {
+    this.model = model ?? null;
   }
 
   subscribe(fn: (r: AuditRecord) => void): () => void {
@@ -62,6 +73,7 @@ export class AuditLog {
       actor,
       agent: this.ctx.agent,
       event,
+      ...(this.model ? { model: this.model } : {}),
       ...fields,
     };
     this.records.push(rec);

@@ -384,7 +384,9 @@ function decisionLabel(optionId: string | undefined, approved: boolean): string 
 }
 
 /** Event families for the audit filter — the prefix before the first `.` (`fs.read` → `fs`). */
-const AUDIT_FAMILIES = ["fs", "permission", "proposal", "hunk", "flag", "qa", "status", "command", "session", "review"] as const;
+// Every family the editor emits. A missing one is invisible under its own chip and only shows
+// under "all" — `short_prelim` was such a gap.
+const AUDIT_FAMILIES = ["fs", "permission", "proposal", "hunk", "flag", "qa", "status", "command", "session", "review", "skill", "short_prelim"] as const;
 const familyOf = (event: string): string => event.split(".")[0] ?? event;
 
 function AuditPanel({ records }: { records: AuditRecord[] }) {

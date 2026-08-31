@@ -169,6 +169,17 @@ export const zAuditRecord = z.object({
   flagIds: z.array(z.string()).optional(),
   argsHash: z.string().optional(),
   outcome: z.string().optional(),
+  // --- context provenance: what produced this turn ---
+  // `agent.version` alone stopped identifying the context once three parties could change it
+  // (agent author, institution, radiologist). Everything here is what the **Client** can attest:
+  // it chose the model and it serves the house and personal layers. The `builtin` layer is
+  // pinned by `agent.version`, and nothing the agent reports is taken on trust.
+  /** The model spec in force when the record was made (`session/set_config_option`). */
+  model: z.string().optional(),
+  /** The skill this turn invoked, when the prompt mentioned one. */
+  skill: z.string().optional(),
+  /** Client-served layers of that skill, in precedence order (`house`, `personal`). */
+  skillLayers: z.array(z.string()).optional(),
 });
 export type AuditRecord = z.infer<typeof zAuditRecord>;
 
