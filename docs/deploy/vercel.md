@@ -1,6 +1,6 @@
 ---
 summary: Provision, deploy, verify, rotate, inspect, and roll back the anonymous, budget-limited ACP-Rad demonstration on Vercel Services.
-read_when: Deploying to Vercel, changing admission or model spend, inspecting hosted audit, or responding to a failed production smoke.
+read_when: Deploying to Vercel, asking what triggers a deployment or why a push did not deploy, changing admission or model spend, inspecting hosted audit, or responding to a failed production smoke.
 ---
 
 # Vercel demo deployment
@@ -68,6 +68,34 @@ Run from the repository root. The linked project is `lightbridge-ks-projects/acp
 Defaults are 90-second leases renewed every 30 seconds. They can be made explicit with `SESSION_LEASE_TTL_SECONDS=90` and `SESSION_LEASE_HEARTBEAT_SECONDS=30`.
 
 The bridge fails at startup if a Vercel deployment lacks Redis configuration, or if Production enables the LLM without the Gateway key and exact base URL. `OPENAI_API_KEY` remains a local/direct-provider fallback; do not configure it on Vercel, because that would create an unintended credential path.
+
+## What triggers a deployment
+
+The repository is connected in the Vercel dashboard (Git link, production branch `main`),
+so **a push to `main` deploys Production**; `vercel deploy --prod` remains the manual path.
+Before 2026-08-31 the project's Git link was `sourceless` — inferred from CLI deploy
+metadata rather than a dashboard connection — and pushes deployed nothing. If a push ever
+appears not to deploy, check `link.sourceless` on the project before assuming CI is broken.
+
+Documentation-only pushes are skipped by the **Ignored Build Step**, set to
+`bash scripts/vercel-ignore-build.sh`. Vercel's contract is inverted: the script exits
+**0 to cancel** the build and **1 to let it proceed**. It compares `VERCEL_GIT_PREVIOUS_SHA`
+— the last successfully deployed commit on the branch — against `HEAD`, and cancels only
+when nothing outside `docs/`, `presentation/`, `README.md`, `CONTEXT.md`, `AGENTS.md`,
+`CLAUDE.md`, `LICENSE`, `.claude/` and `.agents/` has changed. Every uncertain case builds.
+
+Two properties are load-bearing:
+
+- The base is the last **deployed** commit, not `HEAD^`. A push carrying an editor fix and
+  a README tweak would look documentation-only through `HEAD^` alone and be skipped.
+- A canceled build is not a successful deployment, so `VERCEL_GIT_PREVIOUS_SHA` stays put
+  across a run of skipped documentation pushes; the next code push still diffs against the
+  commit that actually shipped.
+
+Vercel clones with `--depth=10`; when the base commit is missing from that shallow history,
+the script falls back to `HEAD^`, and to building outright when even that is absent. A
+canceled build still counts toward deployment quotas and concurrent build slots — the saving
+is the container rebuild and the deploy, not the queue slot.
 
 ## Preview rollout
 
