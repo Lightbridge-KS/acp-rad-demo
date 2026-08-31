@@ -20,8 +20,8 @@ Steps are **P1–P4**, not "slices" — the parent tracker's slice numbers mean 
 
 ## Now / Next
 
-- **Now:** P1–P3 landed; the dry gates are green. Outstanding: the browser run — paste a non-template report, `/impression`, then `/normalize` — and a `just smoke` pass.
-- **Next:** nothing scheduled. P4 (the standalone package) is deferred with no date.
+- **Now:** P1–P3 landed and verified in the browser (2026-08-31, `openai:gpt-5.6-terra`, case `ct-neck-tb-lymph`). `/impression` on the report that broke: **one** `ls` → `read findings.md` complete → `read impression.md` complete → `edit` `requires-action` → Accept → `complete · accepted` → read-back → *"Proposed IMPRESSION items in `sections/impression.md` for radiologist review."* No "unable to access", no repeated `ls`, no `sections/./findings.md` retry — the failing trace was 9 tool calls, this one is 4. `/normalize` then offered itself under **Suggested**, proposed 4 changes (label wrappers only; `TECHNIQUES` kept plural as authored, organ lines untouched) and left the report in house grammar after Accept all.
+- **Next:** nothing scheduled. `just smoke` has not been re-run since these changes (it needs port 8787, held by the dev bridge). P4 (the standalone package) is deferred with no date.
 
 ## Deferred
 
