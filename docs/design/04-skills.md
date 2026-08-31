@@ -57,15 +57,19 @@ Every skill's expansion text obeys these; the system prompt already carries most
 
 | | |
 |---|---|
-| Purpose | Draft the IMPRESSION from the FINDINGS. |
+| Purpose | Draft the IMPRESSION from the FINDINGS, read in the clinical context of the HISTORY. |
 | Argument | none |
-| Reads | `sections/findings.md` |
+| Reads | `sections/history.md`, `sections/findings.md` |
 | Proposes | `sections/impression.md` — `- ` items, most important first, one finding per item, laterality and likely diagnosis stated |
-| Never | edits any other section; adds a finding not in FINDINGS |
+| Never | edits any other section; adds a finding not in FINDINGS; lets the history override the images or restates it as an item |
 
 Expansion (`prompts/skills/impression.md`):
 
-> Read `sections/findings.md`. Propose the IMPRESSION as `- ` items: most important first, one finding per item, each with its laterality and the most likely diagnosis in house wording. Edit `sections/impression.md` only, replacing the current items. Do not restate normal findings unless the study is normal, in which case a single item states that.
+> Read `sections/history.md` for the clinical context, then `sections/findings.md`. Propose the IMPRESSION as `- ` items: most important first, one finding per item, each with its laterality and the most likely diagnosis in house wording. The findings are the evidence; the history only decides between diagnoses the findings already support and how certain the wording may be. It never adds a finding, never overrides what the images show, and is never restated as an item of its own. When the findings sit oddly with the known history — new or progressive disease under treatment — say so in the item rather than assuming the known diagnosis. Edit `sections/impression.md` only, replacing the current items. Do not restate normal findings unless the study is normal, in which case a single item states that.
+
+**Why the history is read (KS, 2026-08-31).** On `ct-neck-tb-lymph` the findings — matted, heterogeneous, enhancing nodes with central necrosis, bilateral cervical and supraclavicular — support tuberculous lymphadenitis *and* nodal metastases equally; the discriminator ("known case of TB lymph node on HRZE") is only in HISTORY, and reading FINDINGS alone the agent proposed metastases. Handing an LLM the chart also hands it an anchoring bias, so the precedence is stated explicitly: the history selects among readings the findings support, it never sources one. **History is read first** (KS's ruling): the indication is why the study exists, and the anchoring risk is carried by the precedence clause, not by withholding the context.
+
+💡 **Discordance.** The skill says so when the findings sit oddly with the known history — a new mass in a patient under treatment is treatment failure, resistance, or a second pathology, and that is often the report's most important sentence. This widens the skill from *summarise* to *interpret*; confirmed by KS 2026-08-31.
 
 ### 3.2 `/compare [prior]`
 
@@ -201,7 +205,7 @@ The overlap is deliberate: a proofreader that edits must stay narrow, a gate tha
 |---|---|---|---|
 | `discrepancy` | the report contradicts itself: laterality, size, count, lobe or segment, technique vs title | the two statements | right kidney in FINDINGS, "left renal stone" in IMPRESSION |
 | `omission` | a **critical or clinically significant** finding described in FINDINGS is absent from the IMPRESSION | clinical weight — which *trivial* findings stay out of the impression is the radiologist's taste and varies by person; never flagged | hyperdense M1 described, impression silent on it |
-| `unsupported` | an IMPRESSION item with no basis in FINDINGS | **meaning, not wording** — the impression is normally more concise than the findings; a paraphrase is not unsupported | "acute infarct" over a FINDINGS that describes normal parenchyma |
+| `unsupported` | an IMPRESSION item with no basis in the FINDINGS **or the HISTORY** | **meaning, not wording** — the impression is normally more concise than the findings; a paraphrase is not unsupported; an etiology the history supplies is supported while the findings stay compatible with it | "acute infarct" over a FINDINGS that describes normal parenchyma |
 | `critical_uncommunicated` | a critical finding is described, and the report records no communication | presence of the discussed-with line (or an SP) | hyperdense MCA sign, no "discussed with Dr." |
 
 Two channels, one rule: a proposal may change bytes, a flag may not.
@@ -238,7 +242,7 @@ Rules: the gate is **advisory** — the agent is untrusted and must be unable to
 
 | Skill | Namespace requirement | Fixture (slice 4) |
 |---|---|---|
-| `/impression` | `sections/findings.md` | any case (`ct-brain-er-stroke`, impression blanked by `demo.start`) |
+| `/impression` | `sections/history.md`, `sections/findings.md` | any case (`ct-brain-er-stroke`, impression blanked by `demo.start`); `ct-neck-tb-lymph` is the case where the history changes the answer |
 | `/compare` | `meta.json.study.date`; `/priors/index.md` listing every prior of the patient as `- <accession> · <exam> · <dd/mm/yyyy> · /priors/<accession>/report.md`; each prior's `report.md` with its title line | `ct-chest-er-nodule-prior` (2 priors: CT chest, CT whole abdomen) · `cxr-pa-prior` (1 prior CXR) |
 | `/proofread` | `report.md` | none — errors are planted by hand in the demo; the smoke script seeds its own buffer |
 
