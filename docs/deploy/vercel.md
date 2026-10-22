@@ -35,7 +35,7 @@ Run from the repository root. The linked project is `lightbridge-ks-projects/acp
 2. Provision one Upstash Redis resource and connect it to this project for **Production and Preview**:
 
    ```sh
-   vercel integration add upstash
+   vercel integration add upstash-kv --name <resource> -e production -e preview
    ```
 
    The code accepts `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` and the Marketplace aliases `KV_REST_API_URL` / `KV_REST_API_TOKEN`. Confirm both target environments receive a URL and token. Do not put either value in git.
@@ -61,9 +61,14 @@ Run from the repository root. The linked project is `lightbridge-ks-projects/acp
 | `RAD_MODEL` | `openai/gpt-5.6-terra` | same or absent | exact Gateway model id |
 | `RAD_MODEL_BASE_URL` | `https://ai-gateway.vercel.sh/v1` | same or absent | required when Production LLM is on |
 | `PORT` | `8787` | `8787` | matches the container `EXPOSE` and health check |
-| `VERCEL_SUPPORT_MAX_CONCURRENCY` | `1` | `1` | opts the beta container function into `maxConcurrency` |
+| `VERCEL_BETA_MAX_CONCURRENCY` | `1` | `1` | opts the beta container function into `maxConcurrency` |
 | `ACTIVE_SESSION_LIMIT` | `10` | `10` | open anonymous agent WebSockets |
 | `AUDIT_RETENTION_SECONDS` | `604800` | `604800` | rolling seven days |
+
+The `maxConcurrency` opt-in was renamed by the platform: it was `VERCEL_SUPPORT_MAX_CONCURRENCY`
+until 2026-10, and a build that sets `maxConcurrency` in `vercel.json` without the current name
+fails with *"the `maxConcurrency` function setting is a beta feature and is subject to different
+pricing"*. The old variable is inert and kept only so an older deployment can still be promoted.
 
 Defaults are 90-second leases renewed every 30 seconds. They can be made explicit with `SESSION_LEASE_TTL_SECONDS=90` and `SESSION_LEASE_HEARTBEAT_SECONDS=30`.
 
@@ -140,6 +145,31 @@ Then open `https://acp-rad-demo-editor.vercel.app` and:
 3. Confirm the Redis `acp-rad:production:audit:<accession>` list contains the audit records and has a TTL near 604800 seconds.
 4. Inspect Vercel runtime logs: methods/statuses are allowed; Redis tokens, Gateway keys, prompts, and report content must be absent.
 5. Confirm AI Gateway usage is attributed to `acp-rad-demo-production` and counts against its daily quota.
+
+### Admission failure modes
+
+Unlike a Gateway failure, these surface **before** the agent exists: the socket never carries
+a protocol message, and the editor shows *ACP connection closed* with **Reconnect agent**.
+`GET /health` is the one-line triage — it runs the same `state.ping()` the upgrade path depends on.
+
+| `/health` | `/acp` close | Meaning |
+|---|---|---|
+| `200 {"status":"ok"}` | opens | admission is healthy; look at the Gateway table below |
+| `503 {"status":"unavailable"}` | `1013` | Redis is unreachable |
+| `200` | `4403` | `DEMO_LLM_ENABLED` is not `true` (expected on Preview) |
+| `200` | `4429` | all `ACTIVE_SESSION_LIMIT` leases are held |
+
+A `1013` is usually **not** a bad token but a missing database. A Marketplace resource that has
+been uninstalled leaves its `KV_*` / `REDIS_URL` variables behind, so the bridge's startup check
+— which validates presence, not reachability — passes, the container logs `listening on port
+8787`, and the failure only appears at the first socket. Confirm with
+`vercel integration ls`: a healthy store reads `● Available`, a dead one `Uninstalled`.
+
+Recovery is a reprovision, not an edit. Delete the dead resource so its stale variables go with it
+(`vercel integration-resource remove <name> --disconnect-all --yes`), provision a replacement as in
+*One-time provisioning*, then redeploy — the container reads its credentials at start-up, so an
+environment change does not reach a running deployment. `vercel redeploy <url> --target production`
+is enough and reuses the existing build; never hand-edit the injected `KV_*` variables.
 
 ### Gateway failure modes
 
